@@ -1,0 +1,79 @@
+services:
+  db:
+    image: mariadb:11.4
+    container_name: pmfibre-db
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MARIADB_DATABASE: ${DB_NAME}
+      MARIADB_USER: ${DB_USER}
+      MARIADB_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    # Pas de port publié sur l'hôte : accès uniquement via le réseau Docker interne.
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [pmnet]
+
+  api:
+    build: ./api
+    container_name: pmfibre-api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+      DB_PORT: "3306"
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      SESSION_TTL_DAYS: ${SESSION_TTL_DAYS}
+      ADMIN_USERNAMES: ${ADMIN_USERNAMES}
+      INVITATION_CODE: ${INVITATION_CODE}
+    volumes:
+      - ./data:/data:ro          # pm_normandie.json pour l'import initial
+    ports:
+      - "8080:8000"              # hôte 8080 (8000 occupé par le serveur de jeu)
+    networks: [pmnet]
+
+  adminer:
+    image: adminer:latest
+    container_name: pmfibre-adminer
+    restart: unless-stopped
+    depends_on:
+      - db
+    environment:
+      ADMINER_DEFAULT_SERVER: db
+    ports:
+      - "8081:8080"             # UI admin BDD sur hôte 8081 (LAN uniquement, non exposé par le tunnel)
+    networks: [pmnet]
+
+  # Tunnel Cloudflare : expose l'API en HTTPS sans ouvrir de port sur PsyOne.
+  # Le routage (api.mapm.online -> http://api:8000) se configure dans le dashboard
+  # Cloudflare Zero Trust (public hostname). Ici il suffit du token du tunnel.
+  # NE DÉMARRE QUE si TUNNEL_TOKEN est renseigné dans .env :
+  #   docker compose up -d cloudflared
+  # Profile "tunnel" : ne démarre PAS avec un simple `docker compose up -d`.
+  # Démarrage explicite une fois TUNNEL_TOKEN renseigné :
+  #   docker compose --profile tunnel up -d cloudflared
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: pmfibre-cloudflared
+    restart: unless-stopped
+    profiles: ["tunnel"]
+    command: tunnel --no-autoupdate run --token ${TUNNEL_TOKEN}
+    depends_on:
+      - api
+    networks: [pmnet]
+
+volumes:
+  db_data:
+
+networks:
+  pmnet:
+    driver: bridge

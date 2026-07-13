@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- Autorise le HTTP en clair uniquement vers le serveur PsyOne en LAN (dev).
+         En prod, l'API passe par https://api.mapm.online (chiffré, pas besoin de cleartext). -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">192.168.1.98</domain>
+    </domain-config>
+</network-security-config>

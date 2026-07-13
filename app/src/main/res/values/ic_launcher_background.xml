@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Bleu nuit échantillonné sur le bord de icone.png -->
+    <color name="ic_launcher_background">#011D49</color>
+</resources>

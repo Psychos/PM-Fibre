@@ -1,0 +1,14 @@
+# Secrets — ne jamais committer
+server/.env
+*.env
+local.properties
+
+# Outils et caches de build
+_tools/
+.gradle/
+.kotlin/
+build/
+app/build/
+
+# Divers
+*.log
