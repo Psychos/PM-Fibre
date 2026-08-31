@@ -10,6 +10,7 @@ import java.util.Locale
 import java.util.TimeZone
 import kotlin.math.asin
 import kotlin.math.cos
+import kotlin.math.hypot
 import kotlin.math.pow
 import kotlin.math.sin
 import kotlin.math.sqrt
@@ -42,9 +43,13 @@ object PmRepository {
     @Volatile private var basePms: List<Pm> = emptyList()      // ARCEP embarqués
     @Volatile private var addedPms: List<Pm> = emptyList()     // ajoutés par des users
     @Volatile private var pms: List<Pm> = emptyList()          // union (added prime)
+    @Volatile private var byCode: Map<String, Pm> = emptyMap()
     @Volatile private var searchIndex: List<Triple<Pm, String, String>> = emptyList()  // pm, code normalisé, commune normalisée
     @Volatile private var cpMap: Map<String, List<String>> = emptyMap()  // code postal -> communes normalisées
     @Volatile private var oiNames: Map<String, String> = emptyMap()
+    // Polygones ZAPM (zone de desserte ARCEP) par code PM : code -> anneaux -> [lat, lon]
+    @Volatile private var zoneRings: Map<String, List<List<DoubleArray>>> = emptyMap()
+    @Volatile private var zoneBBox: Map<String, DoubleArray> = emptyMap()  // code -> [minLat, maxLat, minLon, maxLon]
     private val saved = HashMap<String, SavedPos>()   // code PM -> position enregistrée
 
     /** Normalise pour la recherche : sans accents, majuscules, alphanumérique seul. */
@@ -73,15 +78,18 @@ object PmRepository {
         basePms = parse(text)
         addedPms = loadAddedPms(context)
         cpMap = loadCpMap(context)
+        zoneRings = loadZones(context)
+        zoneBBox = zoneRings.mapValues { (_, rings) -> boundingBox(rings) }
         rebuild()
         loadSaved(context)
     }
 
     private fun rebuild() {
-        val byCode = LinkedHashMap<String, Pm>(basePms.size + addedPms.size)
-        for (p in basePms) p.code?.let { byCode[it] = p }
-        for (p in addedPms) p.code?.let { byCode[it] = p }   // un PM ajouté prime sur l'ARCEP
-        pms = byCode.values.toList()
+        val map = LinkedHashMap<String, Pm>(basePms.size + addedPms.size)
+        for (p in basePms) p.code?.let { map[it] = p }
+        for (p in addedPms) p.code?.let { map[it] = p }   // un PM ajouté prime sur l'ARCEP
+        pms = map.values.toList()
+        byCode = map
         searchIndex = pms.map { Triple(it, normalize(it.code ?: ""), normalize(it.com ?: "")) }
     }
 
@@ -327,7 +335,107 @@ object PmRepository {
             .take(limit)
             .toList()
     }
+
+    // ---- Zone ARCEP (quel PM dessert ce point) ----
+
+    private fun loadZones(context: Context): Map<String, List<List<DoubleArray>>> = try {
+        val text = context.assets.open("zones_normandie.json").bufferedReader().use { it.readText() }
+        val o = JSONObject(text)
+        buildMap {
+            for (code in o.keys()) {
+                val ringsArr = o.getJSONArray(code)
+                val rings = List(ringsArr.length()) { ri ->
+                    val ring = ringsArr.getJSONArray(ri)
+                    List(ring.length()) { pi ->
+                        val p = ring.getJSONArray(pi)
+                        doubleArrayOf(p.getDouble(0), p.getDouble(1))
+                    }
+                }
+                put(code, rings)
+            }
+        }
+    } catch (e: Exception) { emptyMap() }
+
+    private fun boundingBox(rings: List<List<DoubleArray>>): DoubleArray {
+        var minLat = Double.MAX_VALUE; var maxLat = -Double.MAX_VALUE
+        var minLon = Double.MAX_VALUE; var maxLon = -Double.MAX_VALUE
+        for (ring in rings) for (p in ring) {
+            if (p[0] < minLat) minLat = p[0]
+            if (p[0] > maxLat) maxLat = p[0]
+            if (p[1] < minLon) minLon = p[1]
+            if (p[1] > maxLon) maxLon = p[1]
+        }
+        return doubleArrayOf(minLat, maxLat, minLon, maxLon)
+    }
+
+    /** Ray casting (x=lon, y=lat) — même algorithme que `geo.py` côté serveur. */
+    private fun pointInRing(lat: Double, lon: Double, ring: List<DoubleArray>): Boolean {
+        var inside = false
+        var j = ring.size - 1
+        for (i in ring.indices) {
+            val yi = ring[i][0]; val xi = ring[i][1]
+            val yj = ring[j][0]; val xj = ring[j][1]
+            if ((yi > lat) != (yj > lat)) {
+                val xCross = (xj - xi) * (lat - yi) / (yj - yi) + xi
+                if (lon < xCross) inside = !inside
+            }
+            j = i
+        }
+        return inside
+    }
+
+    /** Distance min (m) du point aux segments de l'anneau (projection équirectangulaire, comme `geo.py`). */
+    private fun distToRingM(lat: Double, lon: Double, ring: List<DoubleArray>): Double {
+        val coslat = cos(Math.toRadians(lat))
+        fun toXY(p: DoubleArray) =
+            Math.toRadians(p[1]) * coslat * 6_371_000.0 to Math.toRadians(p[0]) * 6_371_000.0
+        val (px, py) = toXY(doubleArrayOf(lat, lon))
+        var best = Double.MAX_VALUE
+        for (i in ring.indices) {
+            val (ax, ay) = toXY(ring[i])
+            val (bx, by) = toXY(ring[(i + 1) % ring.size])
+            val dx = bx - ax; val dy = by - ay
+            val seg2 = dx * dx + dy * dy
+            val t = if (seg2 == 0.0) 0.0 else (((px - ax) * dx + (py - ay) * dy) / seg2).coerceIn(0.0, 1.0)
+            val cx = ax + t * dx; val cy = ay + t * dy
+            val d = hypot(px - cx, py - cy)
+            if (d < best) best = d
+        }
+        return best
+    }
+
+    /** PM dont la zone ARCEP contient ce point (`insideZone=true`), ou à défaut le PM dont la
+     *  zone est la plus proche à moins de `toleranceM` (marge GPS / simplification des polygones). */
+    fun pmServing(lat: Double, lon: Double, toleranceM: Double = 150.0): ServingPm? {
+        for ((code, rings) in zoneRings) {
+            val bbox = zoneBBox[code] ?: continue
+            if (lat < bbox[0] || lat > bbox[1] || lon < bbox[2] || lon > bbox[3]) continue
+            if (rings.any { pointInRing(lat, lon, it) }) {
+                val pm = byCode[code] ?: continue
+                return ServingPm(pm, true, 0.0)
+            }
+        }
+
+        val latMargin = toleranceM / 111_000.0
+        val lonMargin = toleranceM / (111_000.0 * cos(Math.toRadians(lat)).coerceAtLeast(0.2))
+        var best: ServingPm? = null
+        for ((code, rings) in zoneRings) {
+            val bbox = zoneBBox[code] ?: continue
+            if (lat < bbox[0] - latMargin || lat > bbox[1] + latMargin ||
+                lon < bbox[2] - lonMargin || lon > bbox[3] + lonMargin
+            ) continue
+            val d = rings.minOf { distToRingM(lat, lon, it) }
+            if (d <= toleranceM && (best == null || d < best!!.distanceM)) {
+                val pm = byCode[code] ?: continue
+                best = ServingPm(pm, false, d)
+            }
+        }
+        return best
+    }
 }
+
+/** Résultat de `PmRepository.pmServing` : le PM dont la zone ARCEP couvre (ou avoisine) le point. */
+data class ServingPm(val pm: Pm, val insideZone: Boolean, val distanceM: Double)
 
 data class PmDistance(val view: PmView, val meters: Double)
 

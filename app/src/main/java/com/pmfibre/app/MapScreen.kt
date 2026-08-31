@@ -8,6 +8,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color as AndroidColor
 import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -56,6 +57,54 @@ private fun blueDotIcon(context: Context): Drawable {
     cv.drawCircle(r, r, r, p)                    // halo blanc
     p.color = AndroidColor.rgb(0x15, 0x65, 0xC0) // bleu
     cv.drawCircle(r, r, r * 0.68f, p)
+    return BitmapDrawable(context.resources, bmp)
+}
+
+private val PmExactColor = AndroidColor.rgb(0x2E, 0x7D, 0x32)   // vert : géolocalisé précisément
+private val PmApproxColor = AndroidColor.rgb(0xD3, 0x2F, 0x2F)  // rouge : position approximative
+
+/** Pin de carte façon "goutte" (contour blanc + point central), coloré selon le statut. */
+private fun pmMarkerIcon(context: Context, pinColor: Int): Drawable {
+    val d = context.resources.displayMetrics.density
+    val w = (28 * d).toInt().coerceAtLeast(28)
+    val h = (36 * d).toInt().coerceAtLeast(36)
+    val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+    val cv = Canvas(bmp)
+    val stroke = 1.6f * d
+    val cx = w / 2f
+    val r = w / 2f - stroke
+    val cy = r + stroke
+    val tipY = h - stroke * 0.5f
+
+    fun teardrop(headR: Float, tipYy: Float): Path = Path().apply {
+        addCircle(cx, cy, headR, Path.Direction.CW)
+        val baseHalfWidth = headR * 0.62f
+        val baseY = cy + headR * 0.8f
+        moveTo(cx - baseHalfWidth, baseY)
+        lineTo(cx, tipYy)
+        lineTo(cx + baseHalfWidth, baseY)
+        close()
+    }
+
+    // Ombre légère
+    val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = AndroidColor.argb(50, 0, 0, 0) }
+    cv.save()
+    cv.translate(0f, stroke * 0.5f)
+    cv.drawPath(teardrop(r, tipY), shadowPaint)
+    cv.restore()
+
+    // Contour blanc (légèrement plus grand que le corps coloré)
+    val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = AndroidColor.WHITE }
+    cv.drawPath(teardrop(r + stroke, tipY + stroke * 0.4f), borderPaint)
+
+    // Corps coloré
+    val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = pinColor }
+    cv.drawPath(teardrop(r, tipY), fillPaint)
+
+    // Point central blanc
+    val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = AndroidColor.WHITE }
+    cv.drawCircle(cx, cy, r * 0.32f, dotPaint)
+
     return BitmapDrawable(context.resources, bmp)
 }
 
@@ -137,13 +186,16 @@ fun MapScreen(onSelect: (Pm) -> Unit) {
                     icon = blueDotIcon(map.context)
                     setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
                 })
-                // PM autour
+                // PM autour : pin vert = géolocalisé précisément, rouge = position approximative
+                val exactIcon = pmMarkerIcon(map.context, PmExactColor)
+                val approxIcon = pmMarkerIcon(map.context, PmApproxColor)
                 nearby.forEach { pd ->
                     val v = pd.view
                     map.overlays.add(Marker(map).apply {
                         position = GeoPoint(v.lat, v.lon)
                         title = (if (v.exact) "✅ " else "≈ ") + (v.pm.code ?: "PM")
                         subDescription = "${PmRepository.operatorName(v.pm)} · ${v.pm.com ?: ""}"
+                        icon = if (v.exact) exactIcon else approxIcon
                         setOnMarkerClickListener { _, _ -> onSelect(v.pm); true }
                     })
                 }

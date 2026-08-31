@@ -29,6 +29,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -349,10 +350,16 @@ fun MainScreen(onLogout: () -> Unit) {
 }
 
 /** Onglet 1 : recherche d'une PM par code ou commune. */
+@SuppressLint("MissingPermission")
 @Composable
 fun SearchScreen(onSelect: (Pm) -> Unit, onAddPm: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var query by remember { mutableStateOf("") }
     var results by remember { mutableStateOf<List<PmView>>(emptyList()) }
+    var lastLoc by remember { mutableStateOf<Pair<Double, Double>?>(null) }
+    var servingPm by remember { mutableStateOf<ServingPm?>(null) }
+    var servingChecked by remember { mutableStateOf(false) }
 
     // Recherche instantanée (auto-complétion) dès 2 caractères, insensible aux accents.
     LaunchedEffect(query) {
@@ -361,7 +368,42 @@ fun SearchScreen(onSelect: (Pm) -> Unit, onAddPm: () -> Unit) {
         }
     }
 
+    fun locateServing() {
+        val client = LocationServices.getFusedLocationProviderClient(context)
+        scope.launch {
+            try {
+                val loc = client.getCurrentLocation(
+                    Priority.PRIORITY_HIGH_ACCURACY, CancellationTokenSource().token
+                ).await()
+                if (loc != null) {
+                    lastLoc = loc.latitude to loc.longitude
+                    servingPm = withContext(Dispatchers.IO) { PmRepository.pmServing(loc.latitude, loc.longitude) }
+                    servingChecked = true
+                }
+            } catch (_: Exception) {
+                // silencieux : accès direct facultatif, la recherche manuelle reste disponible
+            }
+        }
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted -> if (granted) locateServing() }
+
+    // Accès direct à "Probable PM de cette zone" dès l'ouverture de l'onglet, avant toute recherche.
+    LaunchedEffect(Unit) {
+        val granted = ContextCompat.checkSelfPermission(
+            context, Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+        if (granted) locateServing() else permissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+    }
+
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+        if (lastLoc != null && servingChecked) {
+            ServingPmCard(serving = servingPm, onSelect = onSelect)
+            Spacer(Modifier.height(12.dp))
+        }
+
         OutlinedTextField(
             value = query,
             onValueChange = { query = it },
@@ -405,6 +447,8 @@ fun NearbyScreen(onSelect: (Pm) -> Unit) {
     var results by remember { mutableStateOf<List<PmDistance>>(emptyList()) }
     var toLocateOnly by remember { mutableStateOf(false) }
     var lastLoc by remember { mutableStateOf<Pair<Double, Double>?>(null) }
+    var servingPm by remember { mutableStateOf<ServingPm?>(null) }
+    var servingChecked by remember { mutableStateOf(false) }
 
     suspend fun computeResults() {
         val l = lastLoc ?: return
@@ -412,6 +456,13 @@ fun NearbyScreen(onSelect: (Pm) -> Unit) {
             if (toLocateOnly) PmRepository.nearestToLocate(l.first, l.second, 25)
             else PmRepository.nearest(l.first, l.second, 25)
         }
+    }
+
+    suspend fun computeServing() {
+        val l = lastLoc ?: return
+        servingChecked = false
+        servingPm = withContext(Dispatchers.IO) { PmRepository.pmServing(l.first, l.second) }
+        servingChecked = true
     }
 
     fun locateAndSearch() {
@@ -429,6 +480,7 @@ fun NearbyScreen(onSelect: (Pm) -> Unit) {
                 } else {
                     lastLoc = loc.latitude to loc.longitude
                     computeResults()
+                    computeServing()
                     status = "Ta position : %.5f, %.5f".format(loc.latitude, loc.longitude)
                 }
             } catch (e: Exception) {
@@ -463,6 +515,12 @@ fun NearbyScreen(onSelect: (Pm) -> Unit) {
         Spacer(Modifier.height(8.dp))
         Text(status)
         Spacer(Modifier.height(8.dp))
+
+        if (lastLoc != null && servingChecked) {
+            ServingPmCard(serving = servingPm, onSelect = onSelect)
+            Spacer(Modifier.height(8.dp))
+        }
+
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(
                 selected = !toLocateOnly,
@@ -486,6 +544,39 @@ fun NearbyScreen(onSelect: (Pm) -> Unit) {
                     exact = v.exact,
                     onClick = { onSelect(v.pm) }
                 )
+            }
+        }
+    }
+}
+
+/** Carte "PM probable de cette zone" (ARCEP), partagée par Recherche et Autour. */
+@Composable
+fun ServingPmCard(serving: ServingPm?, onSelect: (Pm) -> Unit) {
+    Card(
+        onClick = { serving?.let { onSelect(it.pm) } },
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = if (serving != null) GreenOk.copy(alpha = 0.12f) else Color.LightGray.copy(alpha = 0.25f)
+        )
+    ) {
+        Column(Modifier.padding(12.dp)) {
+            Text(
+                "Probable PM de cette zone (ARCEP)",
+                fontWeight = FontWeight.Bold, fontSize = 13.sp, color = GreenOk
+            )
+            if (serving != null) {
+                val label = if (serving.insideZone) "dessert cet endroit"
+                else "zone la plus proche (≈ ${serving.distanceM.toInt()} m)"
+                Text(
+                    "${serving.pm.code ?: "PM"} — $label",
+                    fontWeight = FontWeight.Bold, fontSize = 16.sp
+                )
+                Text(
+                    "${PmRepository.operatorName(serving.pm)} · ${serving.pm.com ?: ""}",
+                    fontSize = 13.sp, color = Color.Gray
+                )
+            } else {
+                Text("Aucune zone ARCEP connue à cet endroit.", fontSize = 13.sp, color = Color.Gray)
             }
         }
     }
@@ -595,6 +686,15 @@ fun InfoScreen(syncInfo: String?, onLogout: () -> Unit, onOpenAdmin: () -> Unit,
             }
         }
         Spacer(Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = { openUrl(context, "https://mapm.online") }) {
+                Text("🔄 Vérifier mise à jour")
+            }
+            OutlinedButton(onClick = { openUrl(context, "https://github.com/Psychos/PM-Fibre") }) {
+                Text("💻 Code source (GitHub)")
+            }
+        }
+        Spacer(Modifier.height(8.dp))
         OutlinedButton(onClick = {
             val token = SessionStore.token
             if (token != null) {
@@ -647,6 +747,13 @@ fun InfoScreen(syncInfo: String?, onLogout: () -> Unit, onOpenAdmin: () -> Unit,
                 "Pour enregistrer une position : ouvre la fiche du PM quand tu es devant, " +
                 "puis « 📍 Enregistrer la position exacte ».",
             fontSize = 14.sp
+        )
+
+        Spacer(Modifier.height(24.dp))
+        Text(
+            "Pour me soumettre des bugs ou des proposition(s) d'amélioration(s) " +
+                "veuillez envoyer un mail à fibre27@free.fr",
+            fontSize = 13.sp, color = Color.Gray
         )
     }
 }

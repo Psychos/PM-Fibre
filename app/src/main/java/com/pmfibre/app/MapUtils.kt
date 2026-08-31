@@ -38,3 +38,12 @@ fun openItinerary(context: Context, lat: Double, lon: Double, label: String?) {
         Toast.LENGTH_LONG
     ).show()
 }
+
+/** Ouvre une URL dans le navigateur (mise à jour, dépôt GitHub…). */
+fun openUrl(context: Context, url: String) {
+    try {
+        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+    } catch (e: ActivityNotFoundException) {
+        Toast.makeText(context, "Aucune application pour ouvrir ce lien", Toast.LENGTH_LONG).show()
+    }
+}

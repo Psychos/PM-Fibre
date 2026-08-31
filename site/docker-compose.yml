@@ -1,0 +1,18 @@
+services:
+  mapm:
+    image: nginx:alpine
+    container_name: mapm
+    restart: unless-stopped
+    volumes:
+      - ./public:/usr/share/nginx/html:ro
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    # Pas de port publié sur l'hôte : accessible uniquement via le tunnel Cloudflare
+    # (réutilise le même tunnel que pmfibre/logic, cf. mapm.online -> http://mapm:80
+    # à configurer dans le dashboard Cloudflare Zero Trust, Public Hostname).
+    networks:
+      - pmnet
+
+networks:
+  pmnet:
+    name: pmfibre_pmnet
+    external: true
