@@ -12,3 +12,10 @@ app/build/
 
 # Divers
 *.log
+
+# Documentation Claude Code (usage interne, pas destinée au dépôt public)
+CLAUDE.md
+AGENTS.md
+
+# APK distribuées (bloat binaire ; distribution réelle via mapm.online)
+*.apk
