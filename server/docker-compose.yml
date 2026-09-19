@@ -35,6 +35,7 @@ services:
       SESSION_TTL_DAYS: ${SESSION_TTL_DAYS}
       ADMIN_USERNAMES: ${ADMIN_USERNAMES}
       INVITATION_CODE: ${INVITATION_CODE}
+      MAX_SESSIONS_PER_USER: ${MAX_SESSIONS_PER_USER}
       PHOTOS_DIR: /photos
     volumes:
       # Migrations de schema (§ 4.3). Montees plutot que copiees dans l'image :
@@ -44,7 +45,11 @@ services:
       # memes que le site sert a l'app. Ils portent le millesime ARCEP qui
       # declenche l'import (§ 3.2, § 4.2). Absents -> l'import ne fait rien et
       # la base reste en l'etat.
-      - ../site/public/data:/packages:ro
+      # Le chemin par defaut vaut pour le depot ; en production le site est
+      # deploye ailleurs (~/mapm-site), d'ou PACKAGES_DIR_HOST dans le .env.
+      # Un bind vers un dossier absent est cree vide par Docker : l'import
+      # ne dirait rien, il ne trouverait simplement aucun paquet.
+      - ${PACKAGES_DIR_HOST:-../site/public/data}:/packages:ro
       # Photos de terrain (§ 3.7). Volume nomme, pas un bind : elles doivent
       # survivre a un `docker compose down` et a une reconstruction de l'image.
       # Hors de la base a dessein — 200 Ko par photo dans un LONGBLOB feraient
