@@ -120,13 +120,15 @@ fun AppRoot() {
             SessionStore.load(context)
             PmRepository.load(context)
         }
-        // Session refusée par le serveur (connexion sur un 3ᵉ appareil, compte
-        // désactivé…) : on oublie le jeton et on repasse à l'écran de connexion.
+        // Session refusée par le serveur (évincée par une 3ᵉ connexion, expirée après
+        // 60 jours, compte désactivé…) : le serveur ne distingue pas la cause exacte au
+        // moment du refus, donc on ne l'affirme pas — on oublie le jeton et on repasse à
+        // l'écran de connexion avec un message neutre.
         val appContext = context.applicationContext
         ApiClient.onSessionExpired = {
             SessionStore.clearToken(appContext)
-            forcedLogoutMsg = "Session fermée : ce compte a été utilisé sur un autre appareil " +
-                "(2 appareils max par compte). Reconnecte-toi."
+            forcedLogoutMsg = "Session fermée (expirée, ou compte connecté sur un autre appareil — " +
+                "2 appareils max par compte). Reconnecte-toi."
             loggedIn = false
         }
         loggedIn = SessionStore.isLoggedIn
@@ -1246,7 +1248,7 @@ fun AddPmScreen(onBack: () -> Unit, onCreated: (Pm) -> Unit) {
             Spacer(Modifier.height(12.dp))
             Text("Département :", fontSize = 13.sp)
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                listOf("14", "27", "50", "61", "76").forEach { d ->
+                listOf("14", "27", "50", "61", "76", "78", "72").forEach { d ->
                     FilterChip(selected = dep == d, onClick = { dep = if (dep == d) "" else d },
                         label = { Text(d) })
                 }

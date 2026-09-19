@@ -11,7 +11,9 @@ pms = re.findall(r"<Placemark.*?</Placemark>", t, re.S)
 
 def data_val(pm, name):
     m = re.search(r'<Data name="' + re.escape(name) + r'">\s*<value>(.*?)</value>', pm, re.S)
-    return (m.group(1).strip() if m else "")
+    val = m.group(1).strip() if m else ""
+    cdata = re.match(r'<!\[CDATA\[(.*?)\]\]>$', val, re.S)
+    return cdata.group(1).strip() if cdata else val
 
 pts = {}   # RefPM -> (lat, lon, adresse)
 for pm in pms:

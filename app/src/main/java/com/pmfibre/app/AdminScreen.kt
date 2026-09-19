@@ -96,6 +96,8 @@ fun AdminScreen(onBack: () -> Unit) {
     var selected by remember { mutableStateOf<ApiClient.AdminUser?>(null) }
     var selectedStats by remember { mutableStateOf<ApiClient.Stats?>(null) }
     var confirmDelete by remember { mutableStateOf<ApiClient.AdminUser?>(null) }
+    var confirmResetPassword by remember { mutableStateOf<ApiClient.AdminUser?>(null) }
+    var resetPasswordResult by remember { mutableStateOf<Pair<String, String>?>(null) }
     var showCodes by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf<String?>(null) }
 
@@ -175,6 +177,9 @@ fun AdminScreen(onBack: () -> Unit) {
                                 }
                             }
                         }) { Text(if (u.active) "⛔ Désactiver" else "✅ Réactiver") }
+                        TextButton(onClick = { confirmResetPassword = u; selected = null }) {
+                            Text("🔑 Réinitialiser le mot de passe")
+                        }
                         TextButton(onClick = { confirmDelete = u; selected = null }) {
                             Text("🗑️ Supprimer", color = AdmOrange)
                         }
@@ -206,6 +211,53 @@ fun AdminScreen(onBack: () -> Unit) {
                 }) { Text("Supprimer", color = AdmOrange) }
             },
             dismissButton = { TextButton(onClick = { confirmDelete = null }) { Text("Annuler") } }
+        )
+    }
+
+    // Confirmation de réinitialisation de mot de passe
+    confirmResetPassword?.let { u ->
+        AlertDialog(
+            onDismissRequest = { confirmResetPassword = null },
+            title = { Text("Réinitialiser le mot de passe de ${u.username} ?") },
+            text = { Text("Un mot de passe temporaire sera généré. L'ancien mot de passe cessera immédiatement de fonctionner et ses sessions actives seront fermées.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    val token = SessionStore.token ?: return@TextButton
+                    scope.launch {
+                        try {
+                            val temp = ApiClient.resetUserPassword(token, u.id)
+                            resetPasswordResult = u.username to temp
+                        } catch (e: Exception) {
+                            Toast.makeText(context, e.message ?: "Erreur", Toast.LENGTH_LONG).show()
+                        }
+                        confirmResetPassword = null
+                    }
+                }) { Text("Réinitialiser") }
+            },
+            dismissButton = { TextButton(onClick = { confirmResetPassword = null }) { Text("Annuler") } }
+        )
+    }
+
+    // Résultat : mot de passe temporaire à transmettre à l'utilisateur
+    resetPasswordResult?.let { (username, temp) ->
+        AlertDialog(
+            onDismissRequest = { resetPasswordResult = null },
+            title = { Text("Mot de passe réinitialisé") },
+            text = {
+                Column {
+                    Text("Transmets ce mot de passe temporaire à $username. Il ne sera plus affiché ensuite.")
+                    Spacer(Modifier.height(8.dp))
+                    Text(temp, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Mot de passe temporaire", temp))
+                    Toast.makeText(context, "Copié", Toast.LENGTH_SHORT).show()
+                }) { Text("📋 Copier") }
+            },
+            dismissButton = { TextButton(onClick = { resetPasswordResult = null }) { Text("Fermer") } }
         )
     }
 

@@ -362,7 +362,7 @@
 "FI-27375-000J": {
 "lat": 49.207508,
 "lon": 1.149716,
-"adresse": "<![CDATA[1 PLACE DE L'EUROPE 27400 LOUVIERS]]>"
+"adresse": "1 PLACE DE L'EUROPE 27400 LOUVIERS"
 },
 "SRO-BPI-8328986": {
 "lat": 49.082147,
@@ -687,7 +687,7 @@
 "FI-27681-000B": {
 "lat": 49.08346,
 "lon": 1.47797,
-"adresse": "<![CDATA[18 AVENUE DE L'ARDECHE 27200 VERNON]]>"
+"adresse": "18 AVENUE DE L'ARDECHE 27200 VERNON"
 },
 "FI-27681-0006": {
 "lat": 49.093787,
@@ -777,7 +777,7 @@
 "FI-27681-0002": {
 "lat": 49.084202,
 "lon": 1.478238,
-"adresse": "<![CDATA[66 AVENUE DE L'ARDECHE 27200 VERNON]]>"
+"adresse": "66 AVENUE DE L'ARDECHE 27200 VERNON"
 },
 "SRO-BPI-7423904": {
 "lat": 48.978254,
@@ -2382,7 +2382,7 @@
 "FI-27681-0013": {
 "lat": 49.092246,
 "lon": 1.482406,
-"adresse": "<![CDATA[2 PLACE D'EVREUX 27200 VERNON]]>"
+"adresse": "2 PLACE D'EVREUX 27200 VERNON"
 },
 "PM-27-229-XK": {
 "lat": 49.350325,
@@ -2762,7 +2762,7 @@
 "FI-27375-000X": {
 "lat": 49.221164,
 "lon": 1.160082,
-"adresse": "<![CDATA[1 RUE DE LA SERPE D'OR 27400 LOUVIERS]]>"
+"adresse": "1 RUE DE LA SERPE D'OR 27400 LOUVIERS"
 },
 "PMU-27-168-002": {
 "lat": 49.284206,
@@ -3487,7 +3487,7 @@
 "FI-27681-0009": {
 "lat": 49.087116,
 "lon": 1.480365,
-"adresse": "<![CDATA[34 AVENUE DE L'ARDECHE 27200 VERNON]]>"
+"adresse": "34 AVENUE DE L'ARDECHE 27200 VERNON"
 },
 "PM-27-165-XA": {
 "lat": 49.305846,
@@ -3552,7 +3552,7 @@
 "FI-27681-0001": {
 "lat": 49.087116,
 "lon": 1.480365,
-"adresse": "<![CDATA[34 AVENUE DE L'ARDECHE 27200 VERNON]]>"
+"adresse": "34 AVENUE DE L'ARDECHE 27200 VERNON"
 },
 "PMU-27-184-005": {
 "lat": 49.261481,
