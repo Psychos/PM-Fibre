@@ -182,8 +182,14 @@ object Sync {
                 val octets = withContext(Dispatchers.IO) { f.readBytes() }
                 val meta = ApiClient.uploadPhoto(token, e.code, e.kind, octets)
                 // Le fichier local devient le cache de la photo distante : elle
-                // vient d'être envoyée, la retélécharger serait absurde.
-                withContext(Dispatchers.IO) { PhotoStore.ecritCache(context, meta.id, octets) }
+                // vient d'être envoyée, la retélécharger serait absurde. Et la
+                // fiche doit continuer de la montrer : en quittant la file
+                // d'attente, la photo disparaissait de l'écran jusqu'au prochain
+                // passage en ligne (§ F09).
+                withContext(Dispatchers.IO) {
+                    PhotoStore.ecritCache(context, meta.id, octets)
+                    PhotoStore.adopte(context, e.code, meta)
+                }
                 PhotoStore.retire(context, e.fichier)
                 envoyees++
             } catch (ex: ApiClient.ApiException) {

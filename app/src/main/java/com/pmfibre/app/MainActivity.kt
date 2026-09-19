@@ -838,7 +838,11 @@ fun PmDetailScreen(pm: Pm, onBack: () -> Unit) {
     var meta by remember(pm.code) { mutableStateOf(MetaStore.meta(pm.code)) }
     var showTags by remember { mutableStateOf(false) }
     var showAcces by remember { mutableStateOf(false) }
-    var photos by remember(pm.code) { mutableStateOf<List<ApiClient.PhotoMeta>>(emptyList()) }
+    // Les photos connues sont lues avant tout appel : hors ligne, la fiche
+    // rouvre sur celles déjà téléchargées au lieu de n'en montrer aucune (§ F09).
+    var photos by remember(pm.code) {
+        mutableStateOf(PhotoStore.connues(context, pm.code))
+    }
     var rechargePhotos by remember { mutableIntStateOf(0) }
 
     fun deleteComment(c: ApiClient.Comment) {
@@ -918,7 +922,14 @@ fun PmDetailScreen(pm: Pm, onBack: () -> Unit) {
         val token = SessionStore.token
         val code = pm.code
         if (token != null && code != null) {
-            try { photos = ApiClient.fetchPhotos(token, code) } catch (_: Exception) {}
+            try {
+                val recues = ApiClient.fetchPhotos(token, code)
+                photos = recues
+                // Gardée : c'est cette liste, et non les octets, qui manquait
+                // pour retrouver les photos hors ligne (§ F09). Un échec réseau
+                // laisse le catalogue tel quel, donc la fiche telle quelle.
+                withContext(Dispatchers.IO) { PhotoStore.memorise(context, code, recues) }
+            } catch (_: Exception) {}
         }
     }
 

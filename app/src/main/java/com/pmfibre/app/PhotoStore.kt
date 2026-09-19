@@ -35,6 +35,15 @@ object PhotoStore {
     private const val CIBLE_OCTETS = 250 * 1024
 
     private const val FILE_ATTENTE = "photos_queue.json"
+    private const val FILE_CATALOGUE = "photos_index.json"
+
+    /**
+     * Nombre de PM gardés au catalogue. Au-delà, les plus anciennement
+     * consultés en sortent — avec les octets de leurs photos, qui sont le vrai
+     * poids sur le disque. Une tournée touche quelques dizaines de PM ; trois
+     * cents laissent plusieurs semaines de terrain derrière soi.
+     */
+    private const val MAX_PM_CATALOGUE = 300
 
     /**
      * Une photo prise sur le terrain, en attente d'envoi ou refusée.
@@ -279,6 +288,61 @@ object PhotoStore {
 
     fun videCache(context: Context) {
         dossierCache(context).listFiles()?.forEach { it.delete() }
+        // Le catalogue part avec les octets : sans eux il ne décrit plus que des
+        // vignettes vides, et il se reconstruit au premier passage en ligne.
+        Fichiers.ecrit(context.filesDir, FILE_CATALOGUE, "[]")
+    }
+
+    // ---- Catalogue : quelles photos porte quel PM ----
+
+    /**
+     * Ce que le serveur a dit des photos de chaque PM consulté.
+     *
+     * Les octets étaient déjà gardés, mais la liste des identifiants venait d'un
+     * appel réseau et vivait le temps de l'écran. Rouvrir une fiche hors ligne
+     * ne savait donc plus quoi chercher dans le cache : les photos téléchargées
+     * la veille étaient là, sur le téléphone, et invisibles (§ F09). C'est cette
+     * liste-là qui manquait.
+     *
+     * Rien ici n'est irremplaçable : le serveur a tout, et perdre ce fichier ne
+     * coûte qu'un rechargement au prochain passage en ligne.
+     */
+    fun connues(context: Context, code: String?): List<ApiClient.PhotoMeta> =
+        if (code == null) emptyList() else litCatalogue(context)[code].orEmpty()
+
+    /** Note ce que le serveur vient de dire des photos d'un PM. */
+    fun memorise(context: Context, code: String, liste: List<ApiClient.PhotoMeta>) {
+        val maj = majCatalogue(litCatalogue(context), code, liste, MAX_PM_CATALOGUE)
+        ecritCatalogue(context, maj.catalogue)
+        // Une photo qui n'est plus au catalogue — effacée par son auteur, ou
+        // dans un PM sorti par ancienneté — n'a plus de raison d'occuper le
+        // disque : plus rien ne mène à ses octets.
+        for (id in maj.aOublier) oublieCache(context, id)
+    }
+
+    /**
+     * Inscrit au catalogue une photo que ce téléphone vient d'envoyer.
+     *
+     * Sans cela, une photo prise le matin et remontée à la synchro disparaissait
+     * de la fiche jusqu'au prochain passage en ligne : elle avait quitté la file
+     * d'attente sans jamais entrer au catalogue.
+     */
+    fun adopte(context: Context, code: String, meta: ApiClient.PhotoMeta) {
+        val deja = connues(context, code)
+        if (deja.any { it.id == meta.id }) return
+        memorise(context, code, deja + meta)
+    }
+
+    private fun litCatalogue(context: Context): Map<String, List<ApiClient.PhotoMeta>> {
+        var lu: Map<String, List<ApiClient.PhotoMeta>> = emptyMap()
+        Fichiers.lit(context.filesDir, FILE_CATALOGUE) { texte ->
+            lu = catalogueDepuisJson(texte)
+        }
+        return lu
+    }
+
+    private fun ecritCatalogue(context: Context, cat: Map<String, List<ApiClient.PhotoMeta>>) {
+        Fichiers.ecrit(context.filesDir, FILE_CATALOGUE, catalogueEnJson(cat))
     }
 
     /** Nettoie les fichiers de capture temporaires : ils ne servent qu'un instant. */
@@ -320,4 +384,99 @@ fun appliqueRefus(
 ): List<PhotoStore.EnAttente> = liste.map {
     if (it.fichier != nom) it
     else it.copy(refus = motif, refusTs = if (motif == null) 0L else ts)
+}
+
+// ---- Format du catalogue des photos connues (§ F09) ----
+
+fun ApiClient.PhotoMeta.enJson(): JSONObject = JSONObject()
+    .put("id", id).put("kind", kind)
+    .apply {
+        if (bytes != null) put("bytes", bytes)
+        if (width != null) put("w", width)
+        if (height != null) put("h", height)
+        if (author != null) put("a", author)
+        if (createdAt != null) put("d", createdAt)
+    }
+
+fun photoMetaDepuisJson(code: String, o: JSONObject): ApiClient.PhotoMeta = ApiClient.PhotoMeta(
+    id = o.getInt("id"), code = code, kind = o.optString("kind", "pm"),
+    bytes = if (o.has("bytes")) o.optInt("bytes") else null,
+    width = if (o.has("w")) o.optInt("w") else null,
+    height = if (o.has("h")) o.optInt("h") else null,
+    author = o.optString("a", "").ifEmpty { null },
+    createdAt = o.optString("d", "").ifEmpty { null }
+)
+
+/**
+ * Le catalogue, du plus anciennement consulté au plus récent.
+ *
+ * Un tableau, et non un objet indexé par code : l'ordre est ici une donnée —
+ * c'est lui qui désigne qui sortira quand le catalogue sera plein — et l'ordre
+ * des clés d'un JSONObject n'est garanti par aucune des deux implémentations
+ * qu'on traverse. Le code du PM porte sa liste et n'est pas répété dans chaque
+ * photo.
+ */
+fun catalogueEnJson(cat: Map<String, List<ApiClient.PhotoMeta>>): String {
+    val racine = JSONArray()
+    for ((code, liste) in cat) {
+        val photos = JSONArray()
+        for (p in liste) photos.put(p.enJson())
+        racine.put(JSONObject().put("code", code).put("photos", photos))
+    }
+    return racine.toString()
+}
+
+fun catalogueDepuisJson(texte: String): Map<String, List<ApiClient.PhotoMeta>> {
+    val racine = JSONArray(texte)
+    val cat = LinkedHashMap<String, List<ApiClient.PhotoMeta>>()
+    for (i in 0 until racine.length()) {
+        val o = racine.getJSONObject(i)
+        val code = o.getString("code")
+        val arr = o.getJSONArray("photos")
+        cat[code] = buildList {
+            for (j in 0 until arr.length()) add(photoMetaDepuisJson(code, arr.getJSONObject(j)))
+        }
+    }
+    return cat
+}
+
+/** Ce que le catalogue devient, et les octets que plus rien ne réclame. */
+data class MajCatalogue(
+    val catalogue: Map<String, List<ApiClient.PhotoMeta>>,
+    val aOublier: List<Int>
+)
+
+/**
+ * Remplace ce que le catalogue disait d'un PM par ce que le serveur vient d'en
+ * dire, et le remet en tête de fraîcheur.
+ *
+ * Le catalogue est borné : le PM consulté passe en dernier, et ce sont les plus
+ * anciens qui sortent. Un PM dont le serveur ne rend plus aucune photo sort
+ * aussi — il n'a rien à garder.
+ */
+fun majCatalogue(
+    ancien: Map<String, List<ApiClient.PhotoMeta>>, code: String,
+    liste: List<ApiClient.PhotoMeta>, maxPm: Int
+): MajCatalogue {
+    val nouveau = LinkedHashMap<String, List<ApiClient.PhotoMeta>>(ancien.size + 1)
+    for ((k, v) in ancien) if (k != code) nouveau[k] = v
+    if (liste.isNotEmpty()) nouveau[code] = liste
+
+    val oublies = ArrayList<Int>()
+    val gardes = liste.mapTo(HashSet()) { it.id }
+    for (p in ancien[code].orEmpty()) if (p.id !in gardes) oublies.add(p.id)
+
+    // Éviction par ancienneté de consultation : les clés sortent dans l'ordre
+    // où elles ont été posées, le PM qu'on vient d'ouvrir étant le dernier.
+    var aRetirer = nouveau.size - maxPm
+    if (aRetirer > 0) {
+        val it = nouveau.entries.iterator()
+        while (aRetirer > 0 && it.hasNext()) {
+            val e = it.next()
+            e.value.forEach { p -> oublies.add(p.id) }
+            it.remove()
+            aRetirer--
+        }
+    }
+    return MajCatalogue(nouveau, oublies)
 }
