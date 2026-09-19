@@ -1,34 +1,39 @@
 """Validation « position dans la zone ARCEP du PM ».
 
-Les polygones ZAPM (simplifiés ~20 m) sont chargés depuis /data/zones_normandie.json :
-{ code_pm: [ anneau1, anneau2, ... ] } avec anneau = [[lat, lon], ...].
+Les anneaux ZAPM (simplifiés ~20 m) sont lus **par département, à la demande**,
+dans les paquets de `packages.py` (§ 4.7).
+
+Auparavant ce module chargeait d'un bloc un `zones_normandie.json` unique. Deux
+raisons de ne pas prolonger ce choix :
+
+  - le fichier national pèse 21 Mo une fois la France entière couverte, à garder
+    en mémoire en permanence pour servir quelques requêtes par minute ;
+  - il n'était pas versionné. Le fichier existe bien sur PsyOne, copié à la main
+    le 16 septembre, mais `git ls-files server/data/` ne connaît que
+    `pm_normandie.json`. Un redéploiement depuis le dépôt seul aurait donc donné
+    un `_load()` en échec, silencieusement rattrapé par `except OSError: {}`, et
+    un `check_in_zone` répondant « dans la zone » pour **tous** les PM : le
+    contrôle aurait disparu sans que rien ne le signale.
+
+Le second point vaut d'être retenu : une zone introuvable reste permissive — on
+n'a pas le droit de refuser une position de terrain parce qu'une donnée manque —
+mais cela rend le manque invisible. `zone_connue()` permet à l'appelant de
+savoir si le contrôle a réellement eu lieu.
 """
-import json
 import math
-import os
-import threading
 
-ZONES_PATH = os.getenv("ZONES_PATH", "/data/zones_normandie.json")
-
-_zones: dict | None = None
-_lock = threading.Lock()
+from . import packages
 
 
-def _load() -> dict:
-    global _zones
-    if _zones is None:
-        with _lock:
-            if _zones is None:
-                try:
-                    with open(ZONES_PATH, encoding="utf-8") as f:
-                        _zones = json.load(f)
-                except OSError:
-                    _zones = {}
-    return _zones
+def zones_dep(dep_code: str | None) -> dict:
+    if not dep_code:
+        return {}
+    return packages.zones_du_departement(dep_code)
 
 
-def has_zone(code: str) -> bool:
-    return code in _load()
+def zone_connue(code: str, dep_code: str | None) -> bool:
+    """Vrai si ce PM a bien une zone ARCEP, donc si le contrôle est effectif."""
+    return bool(zones_dep(dep_code).get(code))
 
 
 def _point_in_ring(lat: float, lon: float, ring: list) -> bool:
@@ -67,9 +72,15 @@ def _dist_to_ring_m(lat: float, lon: float, ring: list) -> float:
     return best
 
 
-def check_in_zone(code: str, lat: float, lon: float) -> tuple[bool, float]:
-    """(dans_la_zone, distance_m_à_la_zone). Si pas de zone connue -> (True, 0)."""
-    rings = _load().get(code)
+def check_in_zone(code: str, lat: float, lon: float,
+                  dep_code: str | None = None) -> tuple[bool, float]:
+    """(dans_la_zone, distance_m_à_la_zone).
+
+    `dep_code` vient de la fiche PM, déjà chargée par l'appelant : c'est lui qui
+    désigne le paquet à ouvrir. Sans zone connue -> (True, 0.0), cas des PM
+    ajoutés à la main (source=user) et des départements non déployés.
+    """
+    rings = zones_dep(dep_code).get(code)
     if not rings:
         return True, 0.0
     for ring in rings:

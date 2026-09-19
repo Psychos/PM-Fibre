@@ -1,7 +1,8 @@
 from datetime import date, datetime
 
 from sqlalchemy import (
-    String, Integer, Double, Boolean, Date, DateTime, Text, ForeignKey, func,
+    BigInteger, String, Integer, Double, Boolean, Date, DateTime, Text,
+    ForeignKey, func,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -53,6 +54,11 @@ class Pm(Base):
     source: Mapped[str] = mapped_column(String(16), default="arcep", nullable=False)  # 'arcep' | 'user'
     created_by: Mapped[str | None] = mapped_column(String(64))
     address: Mapped[str | None] = mapped_column(String(255))
+    # § 3.4 : un PM disparu du referentiel ARCEP est marque, jamais supprime
+    # (les FK sont ON DELETE CASCADE : un DELETE emporterait sa position exacte).
+    retired_at: Mapped[datetime | None] = mapped_column(DateTime, index=True)
+    # Dernier millesime ARCEP ou ce PM etait present, p.ex. « ZAPM 2026T2 ».
+    dataset_version: Mapped[str | None] = mapped_column(String(32))
 
 
 class PmPosition(Base):
@@ -61,6 +67,10 @@ class PmPosition(Base):
     lat: Mapped[float] = mapped_column(Double, nullable=False)
     lon: Mapped[float] = mapped_column(Double, nullable=False)
     accuracy_m: Mapped[float | None] = mapped_column(Double)
+    # § 4.4 : rapide | precise | manuelle | osm. NULL = saisie anterieure au gel
+    # de schema. Sans lui, la regle des 10 m ne peut pas arbitrer entre deux
+    # saisies de qualites differentes.
+    method: Mapped[str | None] = mapped_column(String(16))
     author: Mapped[str | None] = mapped_column(String(255))
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
@@ -72,6 +82,7 @@ class PmPositionHistory(Base):
     lat: Mapped[float] = mapped_column(Double, nullable=False)
     lon: Mapped[float] = mapped_column(Double, nullable=False)
     accuracy_m: Mapped[float | None] = mapped_column(Double)
+    method: Mapped[str | None] = mapped_column(String(16))
     author: Mapped[str | None] = mapped_column(String(255))
     recorded_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
@@ -92,3 +103,77 @@ class PmConfirmation(Base):
     pm_code: Mapped[str] = mapped_column(String(64), primary_key=True)
     username: Mapped[str] = mapped_column(String(64), primary_key=True)
     confirmed_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+# ---------------------------------------------------------------------------
+# Gel de schema (§ 4.3) : les tables ci-dessous sont creees vides, en attendant
+# leur interface. Une migration sur une base deja installee chez des
+# utilisateurs coute bien plus cher qu'une table inutilisee quelques semaines.
+# ---------------------------------------------------------------------------
+
+class PmTag(Base):
+    """§ 3.6 — etiquettes, deux familles, multi-choix.
+
+    Une ligne par etiquette posee : l'auteur est conserve, et retirer une
+    etiquette est un DELETE, pas la reecriture d'une liste.
+    """
+    __tablename__ = "pm_tags"
+    pm_code: Mapped[str] = mapped_column(
+        String(64), ForeignKey("pm.code", ondelete="CASCADE"), primary_key=True)
+    tag: Mapped[str] = mapped_column(String(32), primary_key=True)  # acces_haie, site_shelter...
+    family: Mapped[str] = mapped_column(String(16), nullable=False)  # acces | site
+    author: Mapped[str | None] = mapped_column(String(255))
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class PmAccess(Base):
+    """§ 3.7 — « comment y acceder » : indication courte + point d'acces facultatif.
+
+    Table distincte de `pm` a dessein : `pm` est reecrite a chaque import ARCEP,
+    et ce qui vient des utilisateurs ne doit pas vivre dans une table que
+    l'import reecrit (§ 4.2).
+    """
+    __tablename__ = "pm_access"
+    pm_code: Mapped[str] = mapped_column(
+        String(64), ForeignKey("pm.code", ondelete="CASCADE"), primary_key=True)
+    note: Mapped[str | None] = mapped_column(String(255))
+    lat: Mapped[float | None] = mapped_column(Double)   # point d'acces, si different du PM
+    lon: Mapped[float | None] = mapped_column(Double)
+    author: Mapped[str | None] = mapped_column(String(255))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class PmPhoto(Base):
+    """§ 3.7 — le fichier vit sur le disque, la base garde de quoi le retrouver."""
+    __tablename__ = "pm_photos"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    pm_code: Mapped[str] = mapped_column(
+        String(64), ForeignKey("pm.code", ondelete="CASCADE"), nullable=False, index=True)
+    kind: Mapped[str] = mapped_column(String(16), default="pm", nullable=False)  # pm | acces
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    sha256: Mapped[str | None] = mapped_column(String(64))
+    bytes: Mapped[int | None] = mapped_column(Integer)
+    width: Mapped[int | None] = mapped_column(Integer)
+    height: Mapped[int | None] = mapped_column(Integer)
+    author: Mapped[str | None] = mapped_column(String(255))
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class Tombstone(Base):
+    """§ 4.1 — pierres tombales, pour la synchro incrementale.
+
+    Une synchro par `since` ne voit que ce qui existe : sans trace des
+    suppressions, un commentaire efface sur le serveur resterait sur le
+    telephone indefiniment.
+
+    Pas de cle etrangere vers `pm` : une pierre tombale doit survivre a la
+    disparition de ce qu'elle decrit — c'est sa seule raison d'etre.
+    """
+    __tablename__ = "tombstones"
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)  # position | comment | ...
+    pm_code: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    ref: Mapped[str | None] = mapped_column(String(64))  # id du commentaire, slug d'etiquette...
+    deleted_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)
+    author: Mapped[str | None] = mapped_column(String(255))

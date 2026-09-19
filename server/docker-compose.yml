@@ -36,7 +36,14 @@ services:
       ADMIN_USERNAMES: ${ADMIN_USERNAMES}
       INVITATION_CODE: ${INVITATION_CODE}
     volumes:
-      - ./data:/data:ro          # pm_normandie.json pour l'import initial
+      # Migrations de schema (§ 4.3). Montees plutot que copiees dans l'image :
+      # elles vivent dans server/db/, hors du contexte de build ./api.
+      - ./db/migrations:/app/migrations:ro
+      # Paquets par departement produits par data/build_packages.py, ceux-la
+      # memes que le site sert a l'app. Ils portent le millesime ARCEP qui
+      # declenche l'import (§ 3.2, § 4.2). Absents -> l'import ne fait rien et
+      # la base reste en l'etat.
+      - ../site/public/data:/packages:ro
     ports:
       - "8080:8000"              # hôte 8080 (8000 occupé par le serveur de jeu)
     networks: [pmnet]

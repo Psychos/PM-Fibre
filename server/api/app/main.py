@@ -23,10 +23,10 @@ from . import schemas
 from . import auth
 from . import ratelimit
 from . import geo
+from . import importer
+from . import migrate
 
 app = FastAPI(title="PM Fibre API", version="1.0.0")
-
-PM_DATA_PATH = os.getenv("PM_DATA_PATH", "/data/pm_normandie.json")
 
 # Distance mini (m) entre l'ancienne et la nouvelle position d'un MÊME PM pour
 # accepter une modification. En-dessous = considéré identique, refusé.
@@ -40,47 +40,6 @@ def _haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     dlmb = math.radians(lon2 - lon1)
     a = math.sin(dphi / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dlmb / 2) ** 2
     return 2 * r * math.asin(math.sqrt(a))
-
-
-def _import_pm_if_empty(db: OrmSession) -> None:
-    count = db.scalar(select(func.count()).select_from(Pm))
-    if count and count > 0:
-        return
-    if not os.path.exists(PM_DATA_PATH):
-        return
-    with open(PM_DATA_PATH, "r", encoding="utf-8") as f:
-        rows = json.load(f)
-    for r in rows:
-        d = r.get("date")
-        try:
-            date_pm = datetime.strptime(d, "%Y-%m-%d").date() if d else None
-        except ValueError:
-            date_pm = None
-        db.merge(Pm(
-            code=r["code"], oi=r.get("oi"), op=r.get("op"), com=r.get("com"),
-            dep=r.get("dep"), dep_code=r.get("dep_code"), etat=r.get("etat"),
-            date_pm=date_pm, lgt=r.get("lgt"), tot=r.get("tot"),
-            osm_lat=r.get("lat"), osm_lon=r.get("lon"),
-        ))
-    db.commit()
-
-
-def _seed_osm_positions(db: OrmSession) -> int:
-    """Injecte les positions OSM (pm.osm_lat/lon) comme positions partagées.
-    NE TOURNE QU'UNE FOIS (flag en base) : sinon toute position supprimée par un
-    admin ressusciterait à chaque redémarrage de l'API."""
-    if get_setting(db, "osm_seed_done") == "1":
-        return 0
-    rows = db.execute(
-        select(Pm.code, Pm.osm_lat, Pm.osm_lon)
-        .outerjoin(PmPosition, Pm.code == PmPosition.pm_code)
-        .where(Pm.osm_lat.isnot(None), Pm.osm_lon.isnot(None), PmPosition.pm_code.is_(None))
-    ).all()
-    for code, lat, lon in rows:
-        db.add(PmPosition(pm_code=code, lat=lat, lon=lon, author="OSM/import"))
-    set_setting(db, "osm_seed_done", "1")
-    db.commit()
-    return len(rows)
 
 
 # ---- Réglages (table settings, éditables depuis l'app) ----
@@ -111,11 +70,17 @@ def _seed_invitation_codes(db: OrmSession) -> None:
 @app.on_event("startup")
 def on_startup() -> None:
     wait_for_db()
-    Base.metadata.create_all(engine)  # filet de sécurité si init SQL absent
+    # Trois filets successifs, du plus grossier au plus fin :
+    #   create_all  : cree les tables absentes (base neuve sans le SQL d'init) ;
+    #   migrate     : ajoute les colonnes manquantes sur les tables existantes,
+    #                 ce que create_all ne fait PAS (§ 4.3) ;
+    #   importer    : aligne le referentiel sur le millesime ARCEP des paquets.
+    Base.metadata.create_all(engine)
+    for nom in migrate.applique(engine):
+        logging.getLogger(__name__).info("Migration appliquee : %s", nom)
     db = next(get_db())
     try:
-        _import_pm_if_empty(db)
-        _seed_osm_positions(db)
+        importer.importe_si_necessaire(db, get_setting, set_setting)
         _seed_invitation_codes(db)
     finally:
         db.close()
@@ -373,7 +338,7 @@ def set_position(code: str, body: schemas.PositionIn,
     # Contrôle « dans la zone ARCEP » : strict en saisie manuelle (erreur de frappe,
     # mauvaise ligne copiée…), tolérant en capture GPS (PM en bordure de zone).
     # Les PM ajoutés à la main (source=user) n'ont pas de zone -> pas de contrôle.
-    inside, dist = geo.check_in_zone(code, body.lat, body.lon)
+    inside, dist = geo.check_in_zone(code, body.lat, body.lon, pm.dep_code)
     tolerance = 100.0 if body.manual else 500.0
     if not inside and dist > tolerance:
         raise HTTPException(
