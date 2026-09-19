@@ -593,7 +593,7 @@ object ApiClient {
         try {
             if (jsonBody != null) conn.outputStream.use { it.write(jsonBody.toByteArray(Charsets.UTF_8)) }
             val status = conn.responseCode
-            // Jeton refusé alors qu'on en présentait un : session évincée (2 appareils max),
+            // Jeton refusé alors qu'on en présentait un : session évincée (trop d'appareils),
             // expirée ou compte désactivé → prévenir l'app pour repasser au login.
             if (status == 401 && token != null) onSessionExpired?.invoke()
             val stream = if (status in 200..299) conn.inputStream else conn.errorStream

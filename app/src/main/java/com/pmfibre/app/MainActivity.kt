@@ -157,8 +157,10 @@ fun AppRoot() {
         val appContext = context.applicationContext
         ApiClient.onSessionExpired = {
             SessionStore.clearToken(appContext)
-            forcedLogoutMsg = "Session fermée (expirée, ou compte connecté sur un autre appareil — " +
-                "2 appareils max par compte). Reconnecte-toi."
+            // Le nombre d'appareils autorisés est un réglage du serveur : l'annoncer ici,
+            // c'est promettre un chiffre que l'app ne connaît pas (il disait 2, il en vaut 5).
+            forcedLogoutMsg = "Session fermée (expirée, ou trop d'appareils connectés sur " +
+                "ce compte). Reconnecte-toi."
             loggedIn = false
         }
         loggedIn = SessionStore.isLoggedIn
