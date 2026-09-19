@@ -36,7 +36,20 @@ object PhotoStore {
 
     private const val FILE_ATTENTE = "photos_queue.json"
 
-    data class EnAttente(val fichier: String, val code: String, val kind: String, val ts: Long)
+    /**
+     * Une photo prise sur le terrain, en attente d'envoi ou refusée.
+     *
+     * `refus` porte le motif rendu par le serveur ; tant qu'il est null, la
+     * photo est simplement à envoyer. Une photo refusée reste sur le téléphone
+     * et sort de la file d'envoi : elle attend une décision de l'utilisateur
+     * (réessayer ou supprimer), elle ne repart pas d'elle-même (§ F08).
+     */
+    data class EnAttente(
+        val fichier: String, val code: String, val kind: String, val ts: Long,
+        val refus: String? = null, val refusTs: Long = 0L
+    ) {
+        val refusee: Boolean get() = refus != null
+    }
 
     private fun dossier(context: Context, nom: String): File =
         File(File(context.filesDir, "photos"), nom).apply { mkdirs() }
@@ -189,18 +202,37 @@ object PhotoStore {
         Fichiers.lit(context.filesDir, FILE_ATTENTE) { texte ->
             val arr = JSONArray(texte)
             lues = buildList {
-                for (i in 0 until arr.length()) {
-                    val o = arr.getJSONObject(i)
-                    add(EnAttente(o.getString("f"), o.getString("code"),
-                        o.optString("kind", "pm"), o.optLong("ts", 0L)))
-                }
+                for (i in 0 until arr.length()) add(enAttenteDepuisJson(arr.getJSONObject(i)))
             }
         }
         return lues
     }
 
+    /** Ce que la synchro doit tenter d'envoyer : les refus en sont exclus. */
+    fun aEnvoyer(context: Context): List<EnAttente> = enAttente(context).filterNot { it.refusee }
+
+    /** Les photos que le serveur a refusées et qui attendent une décision. */
+    fun refusees(context: Context): List<EnAttente> = enAttente(context).filter { it.refusee }
+
     fun enAttentePour(context: Context, code: String?): List<EnAttente> =
         if (code == null) emptyList() else enAttente(context).filter { it.code == code }
+
+    /**
+     * Note le refus du serveur sans toucher au fichier.
+     *
+     * L'application effaçait la photo (§ F08) : quota du PM atteint, et une
+     * prise de vue faite sur place disparaissait du téléphone sans un mot,
+     * alors qu'il aurait suffi d'en retirer une autre puis de réessayer.
+     */
+    fun marqueRefus(context: Context, nom: String, motif: String) {
+        ecritQueue(context, appliqueRefus(enAttente(context), nom, motif,
+            System.currentTimeMillis()))
+    }
+
+    /** Remet une photo refusée dans la file (l'utilisateur a levé l'obstacle). */
+    fun relance(context: Context, nom: String) {
+        ecritQueue(context, appliqueRefus(enAttente(context), nom, null, 0L))
+    }
 
     fun fichierEnAttente(context: Context, e: EnAttente): File =
         File(dossierQueue(context), e.fichier)
@@ -213,10 +245,7 @@ object PhotoStore {
 
     private fun ecritQueue(context: Context, liste: List<EnAttente>) {
         val arr = JSONArray()
-        for (e in liste) {
-            arr.put(JSONObject().put("f", e.fichier).put("code", e.code)
-                .put("kind", e.kind).put("ts", e.ts))
-        }
+        for (e in liste) arr.put(e.enJson())
         Fichiers.ecrit(context.filesDir, FILE_ATTENTE, arr.toString())
     }
 
@@ -259,4 +288,36 @@ object PhotoStore {
             if (it.lastModified() < limite) it.delete()
         }
     }
+}
+
+// ---- Format de la file d'attente ----
+//
+// Hors de l'objet, et donc sans `Context` : le format du fichier se relit et
+// s'éprouve sur la JVM, là où le reste de PhotoStore demande un appareil.
+
+fun PhotoStore.EnAttente.enJson(): JSONObject = JSONObject()
+    .put("f", fichier).put("code", code).put("kind", kind).put("ts", ts)
+    .apply {
+        if (refus != null) put("refus", refus)
+        if (refusTs > 0L) put("refusTs", refusTs)
+    }
+
+fun enAttenteDepuisJson(o: JSONObject): PhotoStore.EnAttente = PhotoStore.EnAttente(
+    o.getString("f"), o.getString("code"), o.optString("kind", "pm"),
+    o.optLong("ts", 0L),
+    o.optString("refus", "").ifEmpty { null },
+    o.optLong("refusTs", 0L)
+)
+
+/**
+ * Pose ou lève le refus d'une photo de la file.
+ *
+ * `motif` à null remet l'entrée dans la file d'envoi. Les autres entrées sont
+ * rendues telles quelles : la file est réécrite en entier à chaque fois.
+ */
+fun appliqueRefus(
+    liste: List<PhotoStore.EnAttente>, nom: String, motif: String?, ts: Long
+): List<PhotoStore.EnAttente> = liste.map {
+    if (it.fichier != nom) it
+    else it.copy(refus = motif, refusTs = if (motif == null) 0L else ts)
 }

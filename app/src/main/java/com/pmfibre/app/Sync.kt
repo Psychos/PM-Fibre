@@ -162,14 +162,20 @@ object Sync {
     /**
      * Vide la file d'attente des photos (roadmap 3.7).
      *
-     * Une photo refusée pour de bon — PM inconnu, format rejeté, quota atteint —
-     * quitte la file : la garder ferait retenter le même envoi à chaque
-     * ouverture de l'application, indéfiniment et sur le forfait de
-     * l'utilisateur. Une panne de réseau, elle, la laisse en place.
+     * Une photo refusée pour de bon — PM inconnu, format rejeté, quota du PM
+     * atteint — sort de la file : la laisser ferait retenter le même envoi à
+     * chaque ouverture de l'application, indéfiniment et sur le forfait de
+     * l'utilisateur. Mais elle n'est plus effacée (§ F08) : le fichier reste, le
+     * motif est noté, et la fiche propose de réessayer ou de supprimer. Un quota
+     * de six photos suffisait à faire disparaître sans un mot une prise de vue
+     * faite sur place, alors qu'il aurait suffi d'en retirer une autre.
+     *
+     * Une panne de réseau, elle, laisse la photo dans la file : on retentera.
      */
     private suspend fun envoiePhotos(context: Context, token: String): String {
         var envoyees = 0
-        for (e in PhotoStore.enAttente(context)) {
+        var refusees = 0
+        for (e in PhotoStore.aEnvoyer(context)) {
             val f = PhotoStore.fichierEnAttente(context, e)
             if (!f.exists()) { PhotoStore.retire(context, e.fichier); continue }
             try {
@@ -182,11 +188,17 @@ object Sync {
                 envoyees++
             } catch (ex: ApiClient.ApiException) {
                 if (ex.status in 400..499 && ex.status != 401 && ex.status != 429) {
-                    PhotoStore.retire(context, e.fichier)
+                    PhotoStore.marqueRefus(context, e.fichier,
+                        ex.message ?: "refus du serveur (${ex.status})")
+                    refusees++
                 }
             } catch (_: Exception) {
             }
         }
-        return if (envoyees > 0) " · $envoyees photo(s) envoyée(s)" else ""
+        val envoi = if (envoyees > 0) " · $envoyees photo(s) envoyée(s)" else ""
+        // Dit, et pas seulement noté dans la fiche : sans cette ligne,
+        // l'utilisateur croirait ses photos parties.
+        val refus = if (refusees > 0) " · $refusees photo(s) refusée(s), à traiter" else ""
+        return envoi + refus
     }
 }

@@ -492,10 +492,14 @@ private fun RubriqueDonnees() {
     }
     TitreSection("Photos")
     var tailleCache by remember { mutableStateOf(PhotoStore.tailleCache(context)) }
-    var enAttente by remember { mutableStateOf(PhotoStore.enAttente(context).size) }
+    var enAttente by remember { mutableStateOf(PhotoStore.aEnvoyer(context).size) }
+    // Les refusées sont comptées à part : elles ne partiront pas toutes seules,
+    // c'est à l'utilisateur d'aller les traiter dans la fiche du PM (§ F08).
+    val refusees = remember { PhotoStore.refusees(context).size }
     Text(
         "Photos gardées sur ce téléphone : " + (tailleCache / 1024) + " Ko" +
-            if (enAttente > 0) " · $enAttente en attente d'envoi" else "",
+            (if (enAttente > 0) " · $enAttente en attente d'envoi" else "") +
+            (if (refusees > 0) " · $refusees refusée(s), à traiter dans la fiche" else ""),
         fontSize = 15.sp, modifier = Modifier.padding(horizontal = 16.dp)
     )
     Spacer(Modifier.height(8.dp))

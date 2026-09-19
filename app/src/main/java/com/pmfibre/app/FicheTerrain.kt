@@ -429,11 +429,19 @@ fun BlocPhotos(code: String?, distantes: List<ApiClient.PhotoMeta>, onChange: ()
         ) {
             distantes.forEach { p -> VignetteDistante(p, onClick = { agrandie = p }) }
             enAttente.forEach { e ->
-                VignetteLocale(PhotoStore.fichierEnAttente(context, e), e.kind, onSupprimer = {
-                    PhotoStore.retire(context, e.fichier)
-                    enAttente = PhotoStore.enAttentePour(context, code)
-                    onChange()
-                })
+                VignetteLocale(
+                    PhotoStore.fichierEnAttente(context, e), e,
+                    onSupprimer = {
+                        PhotoStore.retire(context, e.fichier)
+                        enAttente = PhotoStore.enAttentePour(context, code)
+                        onChange()
+                    },
+                    onRelancer = {
+                        PhotoStore.relance(context, e.fichier)
+                        enAttente = PhotoStore.enAttentePour(context, code)
+                        onChange()
+                    }
+                )
             }
         }
         Spacer(Modifier.height(8.dp))
@@ -482,29 +490,57 @@ private fun VignetteDistante(p: ApiClient.PhotoMeta, onClick: () -> Unit) {
     CadreVignette(bmp, p.kind, onClick = onClick)
 }
 
+/**
+ * Une photo qui n'est pas encore chez le serveur : en attente, ou refusée.
+ *
+ * Le refus se dit avec son motif, et laisse le choix (§ F08) : lever
+ * l'obstacle — le plus souvent retirer une autre photo du PM — puis réessayer,
+ * ou renoncer. L'application, elle, effaçait la photo sans prévenir.
+ */
 @Composable
-private fun VignetteLocale(fichier: File, kind: String, onSupprimer: () -> Unit) {
+private fun VignetteLocale(
+    fichier: File, e: PhotoStore.EnAttente,
+    onSupprimer: () -> Unit, onRelancer: () -> Unit
+) {
     var confirme by remember { mutableStateOf(false) }
     val bmp by produceState<Bitmap?>(initialValue = null, fichier.path) {
         value = withContext(Dispatchers.IO) { PhotoStore.decode(fichier, 320) }
     }
-    CadreVignette(bmp, kind, onClick = { confirme = true }, enAttente = true)
+    CadreVignette(bmp, e.kind, onClick = { confirme = true },
+        marqueLocale = if (e.refusee) "⚠️" else "⏳")
     if (confirme) {
         AlertDialog(
             onDismissRequest = { confirme = false },
-            title = { Text("Photo en attente d'envoi") },
-            text = { Text("Elle partira à la prochaine synchronisation. La supprimer ?") },
-            confirmButton = {
-                TextButton(onClick = { confirme = false; onSupprimer() }) { Text("Supprimer") }
+            title = { Text(if (e.refusee) "Photo refusée par le serveur" else "Photo en attente d'envoi") },
+            text = {
+                Text(
+                    if (e.refusee)
+                        "${e.refus}\n\nElle est gardée sur ce téléphone. Réessaie après " +
+                            "avoir levé l'obstacle, ou supprime-la."
+                    else "Elle partira à la prochaine synchronisation. La supprimer ?"
+                )
             },
-            dismissButton = { TextButton(onClick = { confirme = false }) { Text("Garder") } }
+            confirmButton = {
+                if (e.refusee) {
+                    TextButton(onClick = { confirme = false; onRelancer() }) { Text("Réessayer") }
+                } else {
+                    TextButton(onClick = { confirme = false; onSupprimer() }) { Text("Supprimer") }
+                }
+            },
+            dismissButton = {
+                if (e.refusee) {
+                    TextButton(onClick = { confirme = false; onSupprimer() }) { Text("Supprimer") }
+                } else {
+                    TextButton(onClick = { confirme = false }) { Text("Garder") }
+                }
+            }
         )
     }
 }
 
 @Composable
 private fun CadreVignette(
-    bmp: Bitmap?, kind: String, onClick: () -> Unit, enAttente: Boolean = false
+    bmp: Bitmap?, kind: String, onClick: () -> Unit, marqueLocale: String? = null
 ) {
     Box(
         Modifier.size(COTE_VIGNETTE.dp).clip(RoundedCornerShape(8.dp))
@@ -518,7 +554,7 @@ private fun CadreVignette(
                 modifier = Modifier.size(COTE_VIGNETTE.dp)
             )
         }
-        val marque = if (enAttente) "⏳" else if (kind == "acces") "🔑" else ""
+        val marque = marqueLocale ?: if (kind == "acces") "🔑" else ""
         if (marque.isNotEmpty()) {
             Text(
                 marque, fontSize = 14.sp,
