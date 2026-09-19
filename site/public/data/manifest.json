@@ -1,0 +1,78 @@
+{
+  "dataset": "ZAPM 2026T2",
+  "generated": "2026-09-19T08:13:01Z",
+  "max_deps": 6,
+  "min_app_version": 6,
+  "deps": [
+    {
+      "code": "14",
+      "nom": "Calvados",
+      "pm": 1081,
+      "exact": 20,
+      "zones": 1081,
+      "size": 91885,
+      "sha256": "a289eea8a14499d3efaee7ea30e232c95ad2d21d538523f38af3b115909cbf03",
+      "url": "deps/14.tgz"
+    },
+    {
+      "code": "27",
+      "nom": "Eure",
+      "pm": 758,
+      "exact": 20,
+      "zones": 758,
+      "size": 69565,
+      "sha256": "4329d894e1a5de097cefcc1f5c5de11ed02b9cb116e9eec8be80460bf213e18b",
+      "url": "deps/27.tgz"
+    },
+    {
+      "code": "50",
+      "nom": "Manche",
+      "pm": 616,
+      "exact": 188,
+      "zones": 616,
+      "size": 54683,
+      "sha256": "3172980b1c59d58e8b054145839eb2bcc4439a254d63149339ebaacc5ce55458",
+      "url": "deps/50.tgz"
+    },
+    {
+      "code": "61",
+      "nom": "Orne",
+      "pm": 604,
+      "exact": 0,
+      "zones": 604,
+      "size": 54454,
+      "sha256": "ec6ad0ee5d01ef43aa6cc02988e433be3ae6681a9a86d98ec93125de9863fa1b",
+      "url": "deps/61.tgz"
+    },
+    {
+      "code": "72",
+      "nom": "Sarthe",
+      "pm": 829,
+      "exact": 806,
+      "zones": 829,
+      "size": 73481,
+      "sha256": "2ed6fa9059d5a6a72e0aaa0583a78d821426564af4f674db5be7ff1dbdeed67c",
+      "url": "deps/72.tgz"
+    },
+    {
+      "code": "76",
+      "nom": "Seine-Maritime",
+      "pm": 1873,
+      "exact": 96,
+      "zones": 1873,
+      "size": 154322,
+      "sha256": "733da0d2b3dba5dec2b1d3c29c4ab025ac3304e61efcf25add916dfa8b030721",
+      "url": "deps/76.tgz"
+    },
+    {
+      "code": "78",
+      "nom": "Yvelines",
+      "pm": 2169,
+      "exact": 191,
+      "zones": 2169,
+      "size": 181947,
+      "sha256": "f895b9df866ef999c66ad7ad48e83c9cc250adbda9d81b0e918390536f4efca4",
+      "url": "deps/78.tgz"
+    }
+  ]
+}

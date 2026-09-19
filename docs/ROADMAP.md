@@ -371,8 +371,100 @@ composé, sa liste et son défilement sont intacts. Idem pour `AddPmScreen`,
 
 ### Avant diffusion — bloquant
 
-1. `dep_code` partout, générateur de paquets par département, manifeste
-   (version du jeu de données, `max_deps`, `min_app_version`)
+> État vérifié sur le disque le 19 septembre 2026. Le document d'origine a été
+> écrit en lisant GitHub, qui ignorait deux scripts restés non suivis.
+
+1. **`dep_code` partout, paquets par département, manifeste** — *fait pour les
+   7 départements extraits ; reste l'élargissement à la France*
+
+   Déjà en place :
+
+   - `data/build_multi.py` — filtre le shapefile ARCEP **ZAPM T2 2026** et pose
+     `dep_code` depuis le champ `INSEE_DEP`, à la source. C'est la bonne
+     correction du § 4.6 : le code INSEE n'est pas déduit du nom du département,
+     il est lu dans le référentiel. Sortie `data/pm_multi.json`, 7 930 PM.
+   - `data/build_zones_multi.py` — anneaux ZAPM des mêmes PM, simplifiés en
+     Douglas-Peucker à 0,0002° (~22 m), arrondis à 5 décimales. Sortie
+     `data/zones_multi.json`, 7 930 zones, 1,7 Mo.
+   - Côté serveur, `dep_code` existait déjà : colonne indexée dans `models.py`,
+     champ des schémas, filtre `GET /pm?dep=`, lecture dans
+     `_import_pm_if_empty`. Rien à reprendre là.
+   - `data/build_packages.py` — **le générateur de paquets et le manifeste**,
+     écrit le 19 septembre. Part de `pm_multi.json` + `zones_multi.json` (pas du
+     shapefile, disparu), regroupe par `dep_code` et écrit
+     `site/public/data/deps/<code>.tgz` (`pm.json` + `zones.json`) plus
+     `site/public/data/manifest.json` au format du § 3.2. 7 930 PM, 664 Ko au
+     total, de 53 Ko (Orne) à 178 Ko (Yvelines) — conforme à l'estimation
+     « ~100 Ko gzippés par département » du § 2.
+   - **Archives déterministes** : `mtime`, `uid`/`gid` et ordre des entrées
+     figés, gzip sans horodatage. Un contenu inchangé redonne le même `sha256`,
+     sinon le manifeste annoncerait une mise à jour à chaque régénération.
+     Vérifié sur deux exécutions successives.
+   - **Plus aucune position nulle** : chaque PM sort avec une position, exacte
+     (`p: 1`, 1 321 cas) ou centroïde de zone (6 609). Le centroïde est repris
+     tel quel de `pm_full.json` quand il y figure (6 601) et recalculé depuis
+     les anneaux ZAPM pour les 8 PM apparus en T2. Contrôle de non-régression :
+     sur les 7 922 PM communs avec l'asset actuel, **aucune position et aucun
+     marqueur `p` ne change**.
+   - **Divergence de schéma tranchée : `p` survit, `src` disparaît** de la
+     sortie. `PmRepository.kt:319` lit déjà `optInt("p", 0) == 1` ; garder `p`
+     évite de toucher au parseur. `src` reste interne à `pm_multi.json`.
+   - `site/nginx.conf` sert le manifeste en `no-cache` (revalidation par ETag,
+     § 3.4) et les paquets en `max-age=3600`. Sans cela le cache Cloudflare
+     devant `mapm.online` masquerait les mises à jour ARCEP. Syntaxe validée
+     contre `nginx:alpine`.
+
+   Reste à faire :
+
+   - **Portée : 7 départements, pas 103.** `build_packages.py` est lui-même
+     agnostique — il regroupe sur le `dep_code` qu'il trouve, et `joli_nom()`
+     met en forme n'importe quel nom de département sans table à tenir. Le
+     plafond vient de l'**extraction** : `DEPS` est une constante recopiée dans
+     `build_multi.py` et `build_zones_multi.py`, et l'élargir suppose de
+     retélécharger le shapefile ARCEP T2 2026.
+     Option intermédiaire si l'on veut la France sans attendre : `pm_full.json`
+     couvre déjà les 99 268 PM et le § 4.6 rappelle que le code ARCEP porte le
+     code commune (`FI-91477-000Y` → 91477 → 91), donc `dep_code` est
+     déductible. Mais il n'existe **aucune zone ZAPM** hors des 7 départements :
+     les paquets ainsi produits casseraient l'onglet « Autour » et la
+     validation `geo.py`. À trancher, ce n'est pas un détail d'implémentation.
+   - **`min_app_version` vaut 6**, soit le `versionCode` actuel (5) plus un :
+     aucune version publiée ne sait lire ces paquets. À rectifier si l'APK qui
+     les consommera porte un autre numéro.
+   - **`zones_multi.json` est déjà câblé** : il a été recopié tel quel sur
+     l'asset `app/src/main/assets/zones_normandie.json` en v5 (fichiers
+     identiques octet pour octet) — d'où les contours ARCEP visibles sur 78 et
+     72. Le nom de l'asset est désormais trompeur : il ne contient plus la
+     Normandie seule. `geo.py`, lui, lit toujours l'ancien fichier 5
+     départements côté serveur *(§ 4.7)*.
+   - **`pm_multi.json` n'est pas câblé, et c'est délibéré.** 6 609 de ses
+     7 930 PM ont `lat`/`lon` à `null` ; le parsing Kotlin utilise `getDouble`
+     non optionnel et plante dessus. L'asset de l'app est donc reparti de
+     l'ancien `pm_full.json` national via `filter_normandie_app.py`, qui a
+     toujours un centroïde de zone en repli — mais qui filtre **par nom de
+     département** et n'expose pas `dep_code`. Le § 4.6 reste à moitié réglé
+     côté app.
+   - **Contrainte qui en découle pour les paquets** : tout PM livré à l'app
+     doit porter une position, exacte ou approchée. Le repli est le centroïde
+     de sa zone ARCEP, disponible pour 6 601 des 6 609 cas dans l'ancien
+     `pm_full.json`, et calculable depuis `zones_multi.json` pour le reste.
+   - **Divergence de schéma à trancher.** `pm_full.json` marque les positions
+     OSM exactes par `p: 1`, `pm_multi.json` par `src: "osm"`. Un seul des deux
+     doit survivre avant que l'app ne lise les paquets.
+   - **Le shapefile source est absent du disque** : `data/raw_2026T2/` n'existe
+     plus, et le scratchpad `E--PM` que cite le `CLAUDE.md` a été purgé. Les
+     deux scripts ne sont pas rejouables sans retélécharger l'ARCEP T2 2026 —
+     raison de plus pour versionner leurs sorties. Corollaire : la mise en
+     paquets doit partir de `pm_multi.json` et `zones_multi.json`, pas du
+     shapefile.
+   - Écart T1 → T2 déjà mesurable : 8 PM apparus, 5 retirés sur les 7
+     départements. De quoi éprouver le rapport de mise à jour du § 3.4.
+
+   Note héritée, consignée dans l'en-tête de `build_multi.py` : les sources OSM
+   brutes (`PMZ.geojson`, KML) ne sont plus sur ce poste. Les positions exactes
+   sont donc **recyclées** depuis l'ancien `pm_full.json` (`p = 1`) par code PM —
+   un PM ne bouge quasiment jamais. 1 321 positions sur 7 930 (17 %).
+
 2. Import serveur national **versionné** en remplacement de `_import_pm_if_empty`,
    et mise en place d'un vrai mécanisme de migration *(§ 4.2, § 4.3)*
 3. `geo.py` : zones par département, chargées à la demande *(§ 4.7)*
