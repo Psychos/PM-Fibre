@@ -35,6 +35,7 @@ services:
       SESSION_TTL_DAYS: ${SESSION_TTL_DAYS}
       ADMIN_USERNAMES: ${ADMIN_USERNAMES}
       INVITATION_CODE: ${INVITATION_CODE}
+      PHOTOS_DIR: /photos
     volumes:
       # Migrations de schema (§ 4.3). Montees plutot que copiees dans l'image :
       # elles vivent dans server/db/, hors du contexte de build ./api.
@@ -44,6 +45,11 @@ services:
       # declenche l'import (§ 3.2, § 4.2). Absents -> l'import ne fait rien et
       # la base reste en l'etat.
       - ../site/public/data:/packages:ro
+      # Photos de terrain (§ 3.7). Volume nomme, pas un bind : elles doivent
+      # survivre a un `docker compose down` et a une reconstruction de l'image.
+      # Hors de la base a dessein — 200 Ko par photo dans un LONGBLOB feraient
+      # grossir chaque dump nocturne, que le NAS garde trente jours.
+      - photos:/photos
     ports:
       - "8080:8000"              # hôte 8080 (8000 occupé par le serveur de jeu)
     networks: [pmnet]
@@ -80,6 +86,7 @@ services:
 
 volumes:
   db_data:
+  photos:
 
 networks:
   pmnet:

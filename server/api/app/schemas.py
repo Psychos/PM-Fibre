@@ -101,6 +101,8 @@ class PmOut(BaseModel):
     # ils sont affichés dès l'ouverture, en tête (§ 3.7).
     tags: list[str] = []
     access: "AccessOut | None" = None
+    # Les metadonnees seulement : les octets se demandent photo par photo.
+    photos: list["PhotoOut"] = []
 
 
 class PmListItem(BaseModel):
@@ -259,4 +261,22 @@ class SyncMetaOut(BaseModel):
 
 # `PmOut` cite `AccessOut`, défini plus bas : la référence avant déclaration
 # doit être résolue une fois le module entièrement lu.
+# ---- Photos (§ 3.7) ----
+class PhotoOut(BaseModel):
+    """Métadonnées d'une photo. Le contenu se récupère par `GET /photos/{id}`.
+
+    Une liste de fiches ne descend jamais d'octets d'image : sur le terrain, la
+    fiche s'ouvre d'abord, les vignettes suivent — et parfois pas du tout, si le
+    réseau est mauvais.
+    """
+    id: int
+    code: str
+    kind: str                   # pm | acces
+    bytes: int | None = None
+    width: int | None = None
+    height: int | None = None
+    author: str | None = None
+    created_at: datetime
+
+
 PmOut.model_rebuild()

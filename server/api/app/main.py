@@ -1,3 +1,4 @@
+import hashlib
 import json
 import logging
 import math
@@ -9,7 +10,11 @@ from datetime import datetime, timedelta
 # perdus : uvicorn configure ses propres loggers mais pas le root logger.
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, status
+from fastapi import (
+    Depends, FastAPI, File, Form, Header, HTTPException, Query, Request,
+    Response, UploadFile, status,
+)
+from fastapi.responses import FileResponse
 from sqlalchemy import select, func
 from sqlalchemy.orm import Session as OrmSession
 
@@ -17,7 +22,7 @@ from .db import Base, engine, get_db, wait_for_db
 from . import models
 from .models import (
     User, Pm, PmPosition, PmPositionHistory, PmComment, PmConfirmation,
-    PmTag, PmAccess, Session as SessionModel, Setting, Tombstone,
+    PmTag, PmAccess, PmPhoto, Session as SessionModel, Setting, Tombstone,
 )
 from . import schemas
 from . import auth
@@ -26,6 +31,7 @@ from . import geo
 from . import importer
 from . import migrate
 from . import packages
+from . import photos
 
 app = FastAPI(title="PM Fibre API", version="1.0.0")
 
@@ -296,6 +302,7 @@ def get_pm(code: str, db: OrmSession = Depends(get_db), user: User = Depends(aut
         confirmations=conf_count, confirmed_by_me=confirmed_by_me,
         source=pm.source, created_by=pm.created_by, address=pm.address,
         tags=_tags_of(db, code), access=_access_of(db, code),
+        photos=_photos_of(db, code),
     )
 
 
@@ -708,6 +715,139 @@ def sync_meta(
         deleted_tags=[f"{t.pm_code}|{t.ref}" for t in tombes if t.kind == "tag"],
         deleted_access=[t.pm_code for t in tombes if t.kind == "access"],
     )
+
+# =========================================================================
+# PHOTOS (§ 3.7)
+# =========================================================================
+# « Une photo fait trouver un PM situé à 30 m de sa position enregistrée » :
+# c'est le seul élément de la liste qui agit sur les derniers mètres, là où le
+# GPS ne sert plus à rien.
+
+KINDS_PHOTO = {"pm", "acces"}
+
+
+def _photo_out(p: PmPhoto) -> schemas.PhotoOut:
+    return schemas.PhotoOut(
+        id=p.id, code=p.pm_code, kind=p.kind, bytes=p.bytes,
+        width=p.width, height=p.height, author=p.author, created_at=p.created_at)
+
+
+def _photos_of(db: OrmSession, code: str) -> list[schemas.PhotoOut]:
+    rows = db.scalars(select(PmPhoto).where(PmPhoto.pm_code == code)
+                      .order_by(PmPhoto.created_at)).all()
+    return [_photo_out(p) for p in rows]
+
+
+@app.get("/pm/{code}/photos", response_model=list[schemas.PhotoOut])
+def list_photos(code: str, db: OrmSession = Depends(get_db),
+                user: User = Depends(auth.get_current_user)):
+    return _photos_of(db, code)
+
+
+@app.post("/pm/{code}/photos", response_model=schemas.PhotoOut, status_code=201)
+async def upload_photo(
+    code: str,
+    kind: str = Form(default="pm"),
+    file: UploadFile = File(...),
+    db: OrmSession = Depends(get_db),
+    user: User = Depends(auth.get_current_user),
+):
+    """Dépôt d'une photo : le PM lui-même, ou la vue d'approche depuis la route.
+
+    Le client recompresse à ~200 Ko avant d'envoyer ; le serveur ne retouche
+    rien. Redimensionner ici demanderait Pillow dans l'image Docker pour
+    refaire, sur un serveur, un travail que le téléphone fait mieux — il a
+    l'original sous la main et sait ce qu'il veut afficher.
+    """
+    if db.get(Pm, code) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "PM inconnu")
+    if kind not in KINDS_PHOTO:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            "Catégorie inconnue : " + kind)
+
+    # Lecture bornée : `await file.read()` sans limite laisserait un client
+    # décider de la mémoire du serveur. Un octet de plus que le maximum suffit
+    # à distinguer « pile à la limite » de « trop gros ».
+    data = await file.read(photos.MAX_BYTES + 1)
+    if not data:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Fichier vide")
+    if len(data) > photos.MAX_BYTES:
+        raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                            f"Photo trop lourde (maximum {photos.MAX_BYTES // 1024} Ko)")
+
+    format_ = photos.format_reel(data)
+    if format_ is None:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            "Format non reconnu : JPEG ou PNG attendu")
+    ext, _mime = format_
+
+    nb = db.scalar(select(func.count()).select_from(PmPhoto)
+                   .where(PmPhoto.pm_code == code)) or 0
+    if nb >= photos.MAX_PAR_PM:
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            f"Ce PM a déjà {photos.MAX_PAR_PM} photos — supprime-en une d'abord")
+
+    sha = hashlib.sha256(data).hexdigest()
+    # Même cliché déjà déposé sur ce PM : on rend la ligne existante plutôt
+    # qu'un doublon. Un renvoi après coupure réseau est le cas normal, pas une
+    # erreur à signaler à l'utilisateur.
+    existante = db.scalar(select(PmPhoto).where(
+        PmPhoto.pm_code == code, PmPhoto.sha256 == sha, PmPhoto.kind == kind))
+    if existante is not None:
+        return _photo_out(existante)
+
+    nom = photos.enregistre(data, ext)
+    larg, haut = photos.dimensions(data)
+    photo = PmPhoto(pm_code=code, kind=kind, filename=nom, sha256=sha,
+                    bytes=len(data), width=larg, height=haut, author=user.username)
+    db.add(photo)
+    db.commit()
+    db.refresh(photo)
+    return _photo_out(photo)
+
+
+@app.get("/photos/{photo_id}")
+def get_photo(photo_id: int, db: OrmSession = Depends(get_db),
+              user: User = Depends(auth.get_current_user)):
+    """Sert le fichier. Authentifié comme le reste : les positions des PM ne
+    sont pas publiques, les photos de leur emplacement encore moins."""
+    photo = db.get(PmPhoto, photo_id)
+    if photo is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Photo inconnue")
+    chemin = photos.chemin(photo.filename)
+    if not os.path.exists(chemin):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Fichier absent du stockage")
+    mime = "image/png" if photo.filename.endswith(".png") else "image/jpeg"
+    # Le nom du fichier est l'empreinte de son contenu : il ne peut donc pas
+    # changer de contenu, et le cache du téléphone peut le garder un an.
+    return FileResponse(chemin, media_type=mime,
+                        headers={"Cache-Control": "private, max-age=31536000, immutable"})
+
+
+@app.delete("/photos/{photo_id}", status_code=204)
+def delete_photo(photo_id: int, db: OrmSession = Depends(get_db),
+                 user: User = Depends(auth.get_current_user)):
+    """Suppression par l'auteur ou par un administrateur, comme un commentaire."""
+    photo = db.get(PmPhoto, photo_id)
+    if photo is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Photo inconnue")
+    if photo.author != user.username and user.role != "admin":
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Photo d'un autre utilisateur")
+
+    nom, sha, code = photo.filename, photo.sha256, photo.pm_code
+    db.delete(photo)
+    db.add(Tombstone(kind="photo", pm_code=code, ref=str(photo_id),
+                     author=user.username))
+    db.flush()
+
+    # Le nom de fichier étant l'empreinte du contenu, deux fiches peuvent
+    # partager le même fichier : ne l'effacer que si plus personne ne le cite.
+    encore = db.scalar(select(func.count()).select_from(PmPhoto)
+                       .where(PmPhoto.sha256 == sha)) or 0
+    db.commit()
+    if encore == 0:
+        photos.supprime(nom)
+    return Response(status_code=204)
 
 @app.get("/pm/{code}/comments", response_model=list[schemas.CommentOut])
 def list_comments(code: str, db: OrmSession = Depends(get_db), user: User = Depends(auth.get_current_user)):
