@@ -1,6 +1,7 @@
 import base64
 import hashlib
 import hmac
+import logging
 import os
 import secrets
 from datetime import datetime, timedelta
@@ -10,6 +11,8 @@ from sqlalchemy.orm import Session as OrmSession
 
 from .db import get_db
 from .models import User, Session as SessionModel
+
+logger = logging.getLogger("pmfibre.auth")
 
 
 def _sha256(value: str) -> str:
@@ -33,6 +36,13 @@ def hash_password(password: str) -> str:
     salt = os.urandom(16)
     dk = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, _PBKDF2_ITER)
     return f"pbkdf2_sha256${_PBKDF2_ITER}${base64.b64encode(salt).decode()}${base64.b64encode(dk).decode()}"
+
+
+def generate_temporary_password() -> str:
+    # Lisible/dictable à l'oral (pas de caractères ambigus), sans forcer un jeu
+    # de symboles particulier — l'utilisateur le changera à sa prochaine connexion.
+    alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789"
+    return "".join(secrets.choice(alphabet) for _ in range(10))
 
 
 def verify_password(password: str, stored: str) -> bool:
@@ -71,6 +81,10 @@ def create_session(db: OrmSession, user: User) -> str:
             .all()
         )
         for old in existing[max_sessions - 1:]:
+            logger.info(
+                "session evicted: user=%s (id=%s) session_created=%s (nouvelle connexion)",
+                user.username, user.id, old.created_at,
+            )
             db.delete(old)
     sess = SessionModel(
         token_hash=_sha256(token),
@@ -91,7 +105,13 @@ def get_current_user(
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Jeton manquant")
     token = authorization.split(" ", 1)[1].strip()
     sess = db.get(SessionModel, _sha256(token))
-    if sess is None or sess.expires_at < datetime.utcnow():
+    if sess is None:
+        # Jeton introuvable : le plus souvent une éviction (voir create_session, journalisée
+        # à ce moment-là) — parfois une purge de sessions expirées (voir /auth/login).
+        logger.info("session lookup miss for presented token (evicted, purgée, ou jeton invalide)")
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Session invalide ou expirée")
+    if sess.expires_at < datetime.utcnow():
+        logger.info("session expired: user_id=%s created=%s expired=%s", sess.user_id, sess.created_at, sess.expires_at)
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Session invalide ou expirée")
     user = db.get(User, sess.user_id)
     if user is None or not user.active:

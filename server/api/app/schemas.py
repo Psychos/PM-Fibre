@@ -39,6 +39,11 @@ class RoleUpdate(BaseModel):
     role: str = Field(pattern="^(user|admin)$")
 
 
+class PasswordResetOut(BaseModel):
+    username: str
+    temporary_password: str
+
+
 class InvitationCodes(BaseModel):
     code_interne: str = Field(max_length=64)
     code_externe: str = Field(max_length=64)

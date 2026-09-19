@@ -1,8 +1,13 @@
 import json
+import logging
 import math
 import os
 import secrets
 from datetime import datetime
+
+# Sans ceci, les logger.info() applicatifs (ex. auth.py) sont silencieusement
+# perdus : uvicorn configure ses propres loggers mais pas le root logger.
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, status
 from sqlalchemy import select, func
@@ -518,6 +523,19 @@ def admin_delete_user(user_id: int, db: OrmSession = Depends(get_db), admin: Use
     db.delete(u)
     db.commit()
     return schemas.MessageResponse(message="Utilisateur supprimé.")
+
+
+@app.post("/admin/users/{user_id}/reset-password", response_model=schemas.PasswordResetOut)
+def admin_reset_password(user_id: int, db: OrmSession = Depends(get_db), admin: User = Depends(auth.require_admin)):
+    u = db.get(User, user_id)
+    if u is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Utilisateur inconnu")
+    temp_password = auth.generate_temporary_password()
+    u.password_hash = auth.hash_password(temp_password)
+    # Comme une désactivation : on force une reconnexion partout (jeton actuel invalidé).
+    db.query(SessionModel).filter(SessionModel.user_id == u.id).delete()
+    db.commit()
+    return schemas.PasswordResetOut(username=u.username, temporary_password=temp_password)
 
 
 @app.post("/admin/users/{user_id}/deactivate", response_model=schemas.MessageResponse)
