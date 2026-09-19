@@ -588,7 +588,19 @@ def set_tags(code: str, body: schemas.TagsIn, db: OrmSession = Depends(get_db),
 
     actuels = {t.tag: t for t in db.scalars(select(PmTag).where(PmTag.pm_code == code))}
 
-    for tag in voulus - actuels.keys():
+    poses = voulus - actuels.keys()
+    if poses:
+        # Une étiquette reposée annule sa pierre tombale, comme une position
+        # republiée annule la sienne. Sans cela, une synchro qui couvre le
+        # retrait ET la repose livre les deux : le client applique les valeurs
+        # puis les suppressions, et l'étiquette disparaît du téléphone alors
+        # qu'elle existe sur le serveur. Rien ne la ramènerait ensuite — un
+        # différentiel ne renvoie que ce qui a bougé, et plus rien ne bouge.
+        db.query(Tombstone).filter(Tombstone.kind == "tag",
+                                   Tombstone.pm_code == code,
+                                   Tombstone.ref.in_(poses)).delete(
+                                       synchronize_session=False)
+    for tag in poses:
         db.add(PmTag(pm_code=code, tag=tag, family=ETIQUETTES[tag], author=user.username))
     for tag in actuels.keys() - voulus:
         db.delete(actuels[tag])
@@ -630,6 +642,12 @@ def set_access(code: str, body: schemas.AccessIn, db: OrmSession = Depends(get_d
             return None
         db.add(PmAccess(pm_code=code, note=note, lat=body.lat, lon=body.lon,
                         author=user.username))
+        # Même raison que pour les étiquettes : un accès recréé doit effacer la
+        # trace de sa suppression, sinon la synchro livre la valeur et l'ordre
+        # de l'effacer dans la même page, et c'est l'effacement qui gagne.
+        db.query(Tombstone).filter(Tombstone.kind == "access",
+                                   Tombstone.pm_code == code).delete(
+                                       synchronize_session=False)
     elif vide:
         # Tout effacer, c'est supprimer la ligne : une ligne de zéros survivrait
         # à la synchro et réécrirait un accès vide par-dessus celui d'un autre.
