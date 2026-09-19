@@ -133,6 +133,11 @@ fun AppRoot() {
         withContext(Dispatchers.IO) {
             SessionStore.load(context)
             PmRepository.load(context)
+            // Etiquettes et indications d'acces : hors ligne comme le reste
+            // (roadmap 3.6). Chargees ici pour que la premiere fiche ouverte
+            // les ait deja, sans attendre la synchro.
+            MetaStore.charge(context)
+            PhotoStore.nettoieTemporaires(context)
         }
         // Session refusée par le serveur (évincée par une 3ᵉ connexion, expirée après
         // 60 jours, compte désactivé…) : le serveur ne distingue pas la cause exacte au
@@ -608,6 +613,7 @@ fun SearchScreen(onSelect: (Pm) -> Unit, onAddPm: () -> Unit) {
                         title = v.pm.code ?: "PM sans code",
                         subtitle = "${PmRepository.operatorName(v.pm)} · ${v.pm.com ?: ""}",
                         exact = v.exact,
+                        meta = MetaStore.meta(v.pm.code),
                         onClick = { onSelect(v.pm) }
                     )
                 }
@@ -627,6 +633,9 @@ fun NearbyScreen(onSelect: (Pm) -> Unit) {
     var loading by remember { mutableStateOf(false) }
     var results by remember { mutableStateOf<List<PmDistance>>(emptyList()) }
     var toLocateOnly by remember { mutableStateOf(false) }
+    // Filtre sur les étiquettes (roadmap 3.6) : « ceux qu'on ne trouvera pas
+    // tout seul ». C'est la liste qu'on veut avant de partir en tournée.
+    var difficilesOnly by remember { mutableStateOf(false) }
     var lastLoc by remember { mutableStateOf<Pair<Double, Double>?>(null) }
     var servingPm by remember { mutableStateOf<ServingPm?>(null) }
     var servingChecked by remember { mutableStateOf(false) }
@@ -634,8 +643,19 @@ fun NearbyScreen(onSelect: (Pm) -> Unit) {
     suspend fun computeResults() {
         val l = lastLoc ?: return
         results = withContext(Dispatchers.IO) {
-            if (toLocateOnly) PmRepository.nearestToLocate(l.first, l.second, 25)
-            else PmRepository.nearest(l.first, l.second, 25)
+            when {
+                toLocateOnly -> PmRepository.nearestToLocate(l.first, l.second, 25)
+                // On ratisse plus large avant de filtrer : les PM signalés sont
+                // rares, prendre les 25 plus proches puis filtrer n'en rendrait
+                // souvent aucun.
+                difficilesOnly -> PmRepository.nearest(l.first, l.second, 300)
+                    .filter {
+                        val m = MetaStore.meta(it.view.pm.code)
+                        Etiquettes.difficile(m.tags) || m.note != null
+                    }
+                    .take(25)
+                else -> PmRepository.nearest(l.first, l.second, 25)
+            }
         }
     }
 
@@ -704,14 +724,28 @@ fun NearbyScreen(onSelect: (Pm) -> Unit) {
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(
-                selected = !toLocateOnly,
-                onClick = { toLocateOnly = false; scope.launch { computeResults() } },
+                selected = !toLocateOnly && !difficilesOnly,
+                onClick = {
+                    toLocateOnly = false; difficilesOnly = false
+                    scope.launch { computeResults() }
+                },
                 label = { Text("Tous") }
             )
             FilterChip(
                 selected = toLocateOnly,
-                onClick = { toLocateOnly = true; scope.launch { computeResults() } },
+                onClick = {
+                    toLocateOnly = true; difficilesOnly = false
+                    scope.launch { computeResults() }
+                },
                 label = { Text("À géolocaliser") }
+            )
+            FilterChip(
+                selected = difficilesOnly,
+                onClick = {
+                    difficilesOnly = true; toLocateOnly = false
+                    scope.launch { computeResults() }
+                },
+                label = { Text("🙈 Signalés") }
             )
         }
         Spacer(Modifier.height(8.dp))
@@ -723,6 +757,7 @@ fun NearbyScreen(onSelect: (Pm) -> Unit) {
                     title = "${formatDistance(item.meters)} — ${v.pm.code ?: "PM sans code"}",
                     subtitle = "${PmRepository.operatorName(v.pm)} · ${v.pm.com ?: ""}",
                     exact = v.exact,
+                    meta = MetaStore.meta(v.pm.code),
                     onClick = { onSelect(v.pm) }
                 )
             }
@@ -787,6 +822,14 @@ fun PmDetailScreen(pm: Pm, onBack: () -> Unit) {
     var capturePrecise by remember { mutableStateOf(false) }
     val address by rememberAddress(view.lat, view.lon)
 
+    // Étiquettes, indication d'accès, photos (roadmap 3.6, 3.7). Tout est lu
+    // dans les dépôts locaux : la fiche s'ouvre complète sans réseau.
+    var meta by remember(pm.code) { mutableStateOf(MetaStore.meta(pm.code)) }
+    var showTags by remember { mutableStateOf(false) }
+    var showAcces by remember { mutableStateOf(false) }
+    var photos by remember(pm.code) { mutableStateOf<List<ApiClient.PhotoMeta>>(emptyList()) }
+    var rechargePhotos by remember { mutableIntStateOf(0) }
+
     fun deleteComment(c: ApiClient.Comment) {
         val token = SessionStore.token ?: return
         scope.launch {
@@ -849,6 +892,16 @@ fun PmDetailScreen(pm: Pm, onBack: () -> Unit) {
         if (token != null && code != null) {
             try { comments = ApiClient.fetchComments(token, code) } catch (_: Exception) {}
             try { serverDetail = ApiClient.fetchPmDetail(token, code) } catch (_: Exception) {}
+        }
+    }
+
+    // Liste des photos, rechargée après chaque prise de vue ou suppression.
+    // Les octets, eux, ne descendent qu'à l'affichage d'une vignette.
+    LaunchedEffect(pm.code, rechargePhotos) {
+        val token = SessionStore.token
+        val code = pm.code
+        if (token != null && code != null) {
+            try { photos = ApiClient.fetchPhotos(token, code) } catch (_: Exception) {}
         }
     }
 
@@ -940,6 +993,56 @@ fun PmDetailScreen(pm: Pm, onBack: () -> Unit) {
         )
     }
 
+    // Étiquettes et accès : on écrit local, puis on tente la remontée. Le
+    // succès n'est pas attendu — `Sync` repassera — mais quand le réseau est
+    // là, le collègue d'à côté voit l'information tout de suite.
+    fun remonteMeta(bloc: suspend (String, String) -> Unit, apres: (String) -> Unit) {
+        val token = SessionStore.token ?: return
+        val code = pm.code ?: return
+        scope.launch {
+            try {
+                bloc(token, code)
+                apres(code)
+                withContext(Dispatchers.IO) { MetaStore.ecrit(context) }
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    if (showTags) {
+        DialogueEtiquettes(
+            initiales = meta.tags,
+            onDismiss = { showTags = false },
+            onValider = { tags ->
+                showTags = false
+                val code = pm.code
+                if (code != null) {
+                    MetaStore.poseTags(context, code, tags)
+                    meta = MetaStore.meta(code)
+                    remonteMeta({ t, c -> ApiClient.putTags(t, c, tags) }) { MetaStore.tagsEnvoyes(it) }
+                }
+            }
+        )
+    }
+
+    if (showAcces) {
+        DialogueAcces(
+            noteInitiale = meta.note, latInitiale = meta.accesLat, lonInitiale = meta.accesLon,
+            onDismiss = { showAcces = false },
+            onValider = { note, la, lo ->
+                showAcces = false
+                val code = pm.code
+                if (code != null) {
+                    MetaStore.poseAcces(context, code, note, la, lo, SessionStore.username)
+                    meta = MetaStore.meta(code)
+                    remonteMeta({ t, c -> ApiClient.putAccess(t, c, note, la, lo) }) {
+                        MetaStore.accesEnvoye(it)
+                    }
+                }
+            }
+        )
+    }
+
     editingComment?.let { c ->
         EditCommentDialog(
             initial = c.body,
@@ -1002,6 +1105,13 @@ fun PmDetailScreen(pm: Pm, onBack: () -> Unit) {
                 .verticalScroll(rememberScrollState()).padding(16.dp)
         ) {
             PrecisionBadge(view)
+            Spacer(Modifier.height(12.dp))
+
+            // En tête de fiche, avant les références : c'est ce qu'on lit en
+            // arrivant sur place, pas ce qu'on consulte après coup.
+            BlocAcces(pm.code, meta) { showAcces = true }
+            Spacer(Modifier.height(8.dp))
+            BlocEtiquettes(pm.code, meta.tags) { showTags = true }
             Spacer(Modifier.height(12.dp))
 
             SelectionContainer {
@@ -1132,6 +1242,12 @@ fun PmDetailScreen(pm: Pm, onBack: () -> Unit) {
                     }
                 }
             }
+
+            // ---- Photos de terrain ----
+            Spacer(Modifier.height(20.dp))
+            HorizontalDivider()
+            Spacer(Modifier.height(8.dp))
+            BlocPhotos(pm.code, photos) { rechargePhotos++ }
 
             // ---- Commentaires partagés (serveur) ----
             Spacer(Modifier.height(20.dp))
@@ -1372,7 +1488,10 @@ fun InfoRow(label: String, value: String, mono: Boolean = false) {
 }
 
 @Composable
-fun PmListCard(title: String, subtitle: String, exact: Boolean, onClick: () -> Unit) {
+fun PmListCard(
+    title: String, subtitle: String, exact: Boolean,
+    meta: PmMeta = PmMeta(), onClick: () -> Unit
+) {
     Card(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.padding(12.dp).fillMaxWidth(),
@@ -1381,6 +1500,16 @@ fun PmListCard(title: String, subtitle: String, exact: Boolean, onClick: () -> U
             Column(modifier = Modifier.weight(1f)) {
                 Text(title, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 Text(subtitle, fontSize = 13.sp, color = Color.Gray)
+                // Les étiquettes se lisent avant d'ouvrir la fiche : savoir dans
+                // la liste qu'un PM est « non visible de la route » change la
+                // façon de préparer la tournée (roadmap 3.6).
+                val marques = buildString {
+                    if (meta.note != null || meta.aUnPointAcces) append("🔑 ")
+                    meta.tags.take(4).forEach { append(Etiquettes.icone(it)).append(' ') }
+                }.trim()
+                if (marques.isNotEmpty()) {
+                    Text(marques, fontSize = 13.sp)
+                }
             }
             Text(
                 if (exact) "✅" else "≈",

@@ -6,6 +6,10 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
+    <!-- Photos de terrain : l'appareil photo est utile mais pas indispensable,
+         l'application s'installe sur un appareil qui n'en a pas. -->
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+
     <!-- Permet de voir/lancer les applis de cartographie (Android 11+) -->
     <queries>
         <intent>
@@ -35,6 +39,19 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Depuis Android 7, passer un file:// a une autre application leve une
+             FileUriExposedException : l'appareil photo recoit donc un content://
+             delivre par ce provider, limite au repertoire des captures. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 
 </manifest>

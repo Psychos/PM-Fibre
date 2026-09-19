@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Chemins exposés par le FileProvider (roadmap 3.7).
+
+  Uniquement le répertoire des captures temporaires : l'appareil photo a besoin
+  d'y écrire, rien d'autre n'a besoin d'être visible de l'extérieur. Exposer
+  `filesDir` en entier donnerait aussi accès aux positions enregistrées et au
+  cache des photos, sans aucune raison.
+-->
+<paths>
+    <files-path name="captures" path="photos/tmp/" />
+</paths>

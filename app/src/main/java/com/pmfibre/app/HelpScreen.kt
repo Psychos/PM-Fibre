@@ -90,6 +90,11 @@ fun HelpScreen(onBack: () -> Unit) {
                     "👍  Confirmée par N personne(s) : d'autres utilisateurs ont vérifié la position " +
                     "sur le terrain. Plus il y a de confirmations, plus elle est fiable.\n\n" +
                     "🔵  Sur la carte : le point bleu, c'est toi.\n\n" +
+                    "🔑  Une indication d'accès existe : comment arriver jusqu'au PM.\n\n" +
+                    "🏷️  Étiquettes (🌳 haie · ↩️ impasse · 🔄 par l'arrière · 🚧 portail · " +
+                    "🌿 végétation · 🙈 non visible · 🏠 shelter · 🗄️ armoire · 🏢 local · ❔ autre).\n\n" +
+                    "⭕  Sur la carte, un anneau orange entoure les PM signalés — non visibles " +
+                    "de la route, ou porteurs d'une indication d'accès.\n\n" +
                     "👑 admin · 🔷 interne · 🔶 externe · ⛔ compte désactivé (gestion des comptes)."
             )
 
@@ -155,6 +160,27 @@ fun HelpScreen(onBack: () -> Unit) {
                     "Règle des 10 m : une nouvelle position à moins de 10 m de l'actuelle est " +
                     "refusée (elle est déjà précise) ; au-delà, elle remplace l'ancienne et tout " +
                     "est historisé."
+            )
+
+            HelpTitle("🔑 Le faire trouver, pas seulement le situer")
+            HelpBody(
+                "Le GPS amène à l'approche ; le reste fait les derniers mètres. Trois outils, " +
+                    "en tête de fiche, tous utilisables SANS RÉSEAU : ce qui est saisi est gardé " +
+                    "sur le téléphone et part à la synchronisation suivante.\n\n" +
+                    "• 🔑 Indiquer comment y accéder : une phrase, pas plus — « derrière le " +
+                    "transformateur, portail vert ». C'est la première chose que lira le collègue.\n" +
+                    "• 🚗 Point d'accès : un deuxième point, facultatif, pour « où se garer / par " +
+                    "où entrer ». Cas du lotissement dont l'accès se fait par l'arrière : le GPS " +
+                    "de la voiture vise ce point-là, pas le PM.\n" +
+                    "• 🏷️ Étiquettes : à cocher en deux secondes, elles apparaissent ensuite dans " +
+                    "les listes et sur la carte. Le filtre « 🙈 Signalés » de l'onglet Autour " +
+                    "n'affiche que les PM qu'on ne trouve pas tout seul.\n" +
+                    "• 📷 Photos : « Le PM » et « L'accès » (la vue depuis la route, avec un " +
+                    "repère : portail, numéro, poteau). Réduites à ~200 Ko sur le téléphone, " +
+                    "envoyées à la synchro — donc une photo prise sans réseau n'est pas perdue. " +
+                    "Six par PM au maximum ; tu peux supprimer les tiennes.\n\n" +
+                    "Étiquette ou commentaire ? L'étiquette pour ce qui revient souvent, le " +
+                    "commentaire pour l'exception (« accès par l'école, demander au gardien »)."
             )
 
             HelpTitle("➕ Ajouter un PM absent")

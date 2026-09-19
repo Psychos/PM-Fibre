@@ -490,6 +490,28 @@ private fun RubriqueDonnees() {
             importLauncher.launch(arrayOf("application/json", "text/*"))
         }) { Text("📥 Importer") }
     }
+    TitreSection("Photos")
+    var tailleCache by remember { mutableStateOf(PhotoStore.tailleCache(context)) }
+    var enAttente by remember { mutableStateOf(PhotoStore.enAttente(context).size) }
+    Text(
+        "Photos gardées sur ce téléphone : " + (tailleCache / 1024) + " Ko" +
+            if (enAttente > 0) " · $enAttente en attente d'envoi" else "",
+        fontSize = 15.sp, modifier = Modifier.padding(horizontal = 16.dp)
+    )
+    Spacer(Modifier.height(8.dp))
+    OutlinedButton(
+        onClick = {
+            PhotoStore.videCache(context)
+            tailleCache = PhotoStore.tailleCache(context)
+        },
+        modifier = Modifier.padding(horizontal = 16.dp)
+    ) { Text("🧹 Vider le cache des photos") }
+    Paragraphe(
+        "Ce cache n'est qu'une copie : les photos restent sur le serveur et " +
+            "redescendent à l'ouverture d'une fiche. Celles qui attendent l'envoi " +
+            "ne sont pas touchées."
+    )
+
     if (message.isNotEmpty()) {
         Spacer(Modifier.height(8.dp))
         Text(message, fontSize = 14.sp, modifier = Modifier.padding(horizontal = 16.dp))

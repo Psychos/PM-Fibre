@@ -121,6 +121,28 @@ private fun blueDotIcon(context: Context): Drawable {
 }
 
 /**
+ * Anneau creux posé sur les PM signalés « non visible de la route » ou porteurs
+ * d'une indication d'accès (roadmap 3.6 : drapeau de synthèse sur la carte).
+ *
+ * Un anneau plutôt qu'un pictogramme : il entoure le point sans le cacher, et le
+ * statut de géolocalisation — la couleur et la forme du point — reste lisible.
+ */
+private fun anneauSignale(context: Context, couleur: Int): Drawable {
+    val d = context.resources.displayMetrics.density
+    val size = (26 * d).toInt().coerceAtLeast(26)
+    val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+    val cv = Canvas(bmp)
+    val r = size / 2f
+    val p = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = couleur
+        style = Paint.Style.STROKE
+        strokeWidth = 2.5f * d
+    }
+    cv.drawCircle(r, r, r - p.strokeWidth, p)
+    return BitmapDrawable(context.resources, bmp)
+}
+
+/**
  * PM au même endroit — les shelters (roadmap 3.9). Un à trois PM partagent
  * régulièrement une armoire ; superposés au pixel près ils sont indiscernables et
  * un appui en choisirait un au hasard. Regroupés, ils deviennent une information
@@ -129,6 +151,15 @@ private fun blueDotIcon(context: Context): Drawable {
 private data class GroupePm(val lat: Double, val lon: Double, val membres: List<PmView>) {
     /** Un seul membre relevé sur place suffit à mener au bon endroit. */
     val exact: Boolean get() = membres.any { it.exact }
+
+    /** Au moins un membre est « non visible de la route » ou porte une
+     *  indication d'accès : c'est ce qui mérite un anneau sur la carte. */
+    val signale: Boolean
+        get() = membres.any {
+            val m = MetaStore.meta(it.pm.code)
+            Etiquettes.difficile(m.tags) || m.note != null
+        }
+
     val libelle: String
         get() = if (membres.size > 1) membres.size.toString() + " PM"
                 else (membres[0].pm.code ?: "PM")
@@ -332,6 +363,25 @@ fun MapScreen(onSelect: (Pm) -> Unit) {
                     onUn = onSelect, onPlusieurs = { choix = it }
                 )
 
+                // Anneaux des PM signalés. Bornés : chaque anneau est un overlay,
+                // et au-delà de quelques dizaines ils se chevauchent au point de
+                // ne plus rien signaler du tout.
+                if (groupes.size <= 150) {
+                    val couleurSignal = couleurs.avert.toArgb()
+                    for (g in groupes) {
+                        if (!g.signale) continue
+                        map.overlays.add(Marker(map).apply {
+                            position = GeoPoint(g.lat, g.lon)
+                            icon = anneauSignale(map.context, couleurSignal)
+                            setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                            setOnMarkerClickListener { _, _ ->
+                                if (g.membres.size == 1) onSelect(g.membres[0].pm) else choix = g
+                                true
+                            }
+                        })
+                    }
+                }
+
                 // Ma position en dernier : elle doit rester visible au-dessus des PM.
                 maPosition?.let { p ->
                     map.overlays.add(Marker(map).apply {
@@ -359,9 +409,14 @@ fun MapScreen(onSelect: (Pm) -> Unit) {
                         fontSize = 13.sp, color = Color(0xFF666666)
                     )
                     for (v in g.membres) {
+                        val m = MetaStore.meta(v.pm.code)
+                        val marques = buildString {
+                            if (m.note != null || m.aUnPointAcces) append(" 🔑")
+                            m.tags.take(3).forEach { append(' ').append(Etiquettes.icone(it)) }
+                        }
                         Text(
                             (if (v.exact) "✅ " else "≈ ") + (v.pm.code ?: "PM") +
-                                " · " + PmRepository.operatorName(v.pm),
+                                " · " + PmRepository.operatorName(v.pm) + marques,
                             fontSize = 15.sp,
                             modifier = Modifier.fillMaxWidth()
                                 .clickable { choix = null; onSelect(v.pm) }

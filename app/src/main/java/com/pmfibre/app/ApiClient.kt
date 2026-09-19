@@ -60,7 +60,16 @@ object ApiClient {
         val lat: Double?, val lon: Double?, val accuracyM: Double?,
         val author: String?, val updatedAt: String?,
         val confirmations: Int, val confirmedByMe: Boolean,
-        val address: String?
+        val address: String?,
+        // Etiquettes, acces et photos viennent avec la fiche : ils sont
+        // affiches des l'ouverture, en tete, et trois appels de plus pour un
+        // ecran qui s'ouvre en tournee ne se justifiaient pas (roadmap 3.7).
+        val tags: List<String> = emptyList(),
+        val accessNote: String? = null,
+        val accessLat: Double? = null,
+        val accessLon: Double? = null,
+        val accessAuthor: String? = null,
+        val photos: List<PhotoMeta> = emptyList()
     )
 
     class ApiException(val status: Int, message: String) : Exception(message)
@@ -279,6 +288,7 @@ object ApiClient {
     // ---- Détail serveur d'une fiche (confirmations, auteur/précision de la position) ----
     private fun parsePmDetail(o: JSONObject): PmDetail {
         val pos = if (o.isNull("position")) null else o.getJSONObject("position")
+        val acces = if (o.isNull("access")) null else o.optJSONObject("access")
         return PmDetail(
             positionStatus = o.optString("position_status", "inconnue"),
             lat = pos?.optDouble("lat"), lon = pos?.optDouble("lon"),
@@ -287,7 +297,17 @@ object ApiClient {
             updatedAt = pos?.let { optStr(it, "updated_at") },
             confirmations = o.optInt("confirmations", 0),
             confirmedByMe = o.optBoolean("confirmed_by_me", false),
-            address = optStr(o, "address")
+            address = optStr(o, "address"),
+            tags = o.optJSONArray("tags")?.let { a ->
+                buildList { for (i in 0 until a.length()) add(a.getString(i)) }
+            } ?: emptyList(),
+            accessNote = acces?.let { optStr(it, "note") },
+            accessLat = acces?.let { if (it.isNull("lat")) null else it.getDouble("lat") },
+            accessLon = acces?.let { if (it.isNull("lon")) null else it.getDouble("lon") },
+            accessAuthor = acces?.let { optStr(it, "author") },
+            photos = o.optJSONArray("photos")?.let { a ->
+                buildList { for (i in 0 until a.length()) add(parsePhoto(a.getJSONObject(i))) }
+            } ?: emptyList()
         )
     }
 
@@ -341,6 +361,192 @@ object ApiClient {
         o.getInt("id"), o.getString("body"), optStr(o, "author"),
         o.optString("created_at", ""), o.optString("updated_at", "")
     )
+
+    // ---- Étiquettes et indication d'accès (roadmap 3.6, 3.7) ----
+
+    /** L'ensemble complet des étiquettes du PM, pas un ajout : le serveur en
+     *  déduit lui-même les poses et les retraits. */
+    suspend fun putTags(token: String, code: String, tags: List<String>): List<String> =
+        withContext(Dispatchers.IO) {
+            val body = JSONObject().put("tags", JSONArray(tags))
+            val (status, text) = rawRequest("PUT", "/pm/${enc(code)}/tags", body.toString(), token)
+            if (status !in 200..299) throw ApiException(status, extractError(text, status))
+            val arr = JSONArray(text)
+            buildList { for (i in 0 until arr.length()) add(arr.getJSONObject(i).getString("tag")) }
+        }
+
+    suspend fun putAccess(token: String, code: String, note: String?, lat: Double?, lon: Double?) =
+        withContext(Dispatchers.IO) {
+            val body = JSONObject()
+            body.put("note", note ?: JSONObject.NULL)
+            body.put("lat", lat ?: JSONObject.NULL)
+            body.put("lon", lon ?: JSONObject.NULL)
+            requestJson("PUT", "/pm/${enc(code)}/access", body, token)
+            Unit
+        }
+
+    data class MetaTag(val code: String, val tag: String)
+    data class MetaAccess(
+        val code: String, val note: String?, val lat: Double?, val lon: Double?, val author: String?
+    )
+    /** Étiquettes et accès d'une synchro menée à son terme. `deletedTags`
+     *  contient des couples « code|étiquette », comme les rend le serveur. */
+    data class SyncMetaResult(
+        val tags: List<MetaTag>,
+        val access: List<MetaAccess>,
+        val deletedTags: List<String>,
+        val deletedAccess: List<String>,
+        val nextSince: String,
+        val full: Boolean
+    )
+
+    /**
+     * Synchro des étiquettes et des indications d'accès, page par page.
+     *
+     * Même contrat que `syncPositions` : rien n'est appliqué tant que la boucle
+     * n'a pas abouti, et le curseur ne vaut que pour le périmètre demandé.
+     */
+    suspend fun syncMeta(token: String, since: String?, deps: List<String> = emptyList()):
+        SyncMetaResult = withContext(Dispatchers.IO) {
+        val tags = ArrayList<MetaTag>()
+        val access = ArrayList<MetaAccess>()
+        val delTags = ArrayList<String>()
+        val delAccess = ArrayList<String>()
+        var curseur = since
+        var pages = 0
+        while (true) {
+            val q = StringBuilder("/sync/meta?")
+            if (!curseur.isNullOrEmpty()) q.append("since=").append(enc(curseur!!)).append('&')
+            if (deps.isNotEmpty()) q.append("dep=").append(enc(deps.joinToString(","))).append('&')
+            val o = requestJson("GET", q.toString().trimEnd('&', '?'), null, token)
+
+            val at = o.getJSONArray("tags")
+            for (i in 0 until at.length()) {
+                val e = at.getJSONObject(i)
+                tags.add(MetaTag(e.getString("code"), e.getString("tag")))
+            }
+            val aa = o.getJSONArray("access")
+            for (i in 0 until aa.length()) {
+                val e = aa.getJSONObject(i)
+                access.add(MetaAccess(
+                    e.getString("code"), optStr(e, "note"),
+                    if (e.isNull("lat")) null else e.getDouble("lat"),
+                    if (e.isNull("lon")) null else e.getDouble("lon"),
+                    optStr(e, "author")))
+            }
+            o.optJSONArray("deleted_tags")?.let { a ->
+                for (i in 0 until a.length()) delTags.add(a.getString(i))
+            }
+            o.optJSONArray("deleted_access")?.let { a ->
+                for (i in 0 until a.length()) delAccess.add(a.getString(i))
+            }
+
+            curseur = o.getString("next_since")
+            if (o.optBoolean("complete", true)) break
+            if (++pages >= MAX_PAGES_SYNC) throw ApiException(500, "Synchro interminable")
+        }
+        SyncMetaResult(tags, access, delTags, delAccess, curseur!!, since.isNullOrEmpty())
+    }
+
+    // ---- Photos (roadmap 3.7) ----
+
+    data class PhotoMeta(
+        val id: Int, val code: String, val kind: String,
+        val bytes: Int?, val width: Int?, val height: Int?,
+        val author: String?, val createdAt: String?
+    )
+
+    private fun parsePhoto(o: JSONObject) = PhotoMeta(
+        o.getInt("id"), o.optString("code", ""), o.optString("kind", "pm"),
+        if (o.isNull("bytes")) null else o.optInt("bytes"),
+        if (o.isNull("width")) null else o.optInt("width"),
+        if (o.isNull("height")) null else o.optInt("height"),
+        optStr(o, "author"), optStr(o, "created_at")
+    )
+
+    suspend fun fetchPhotos(token: String, code: String): List<PhotoMeta> =
+        withContext(Dispatchers.IO) {
+            val arr = getArray("/pm/${enc(code)}/photos", token)
+            buildList { for (i in 0 until arr.length()) add(parsePhoto(arr.getJSONObject(i))) }
+        }
+
+    /** Dépose une photo déjà compressée par `PhotoStore`. */
+    suspend fun uploadPhoto(token: String, code: String, kind: String, octets: ByteArray): PhotoMeta =
+        withContext(Dispatchers.IO) {
+            val (status, text) = multipart("/pm/${enc(code)}/photos", token, kind, octets)
+            if (status !in 200..299) throw ApiException(status, extractError(text, status))
+            parsePhoto(JSONObject(text))
+        }
+
+    suspend fun downloadPhoto(token: String, id: Int): ByteArray = withContext(Dispatchers.IO) {
+        val url = URL("$baseUrl/photos/$id")
+        val conn = (url.openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"
+            connectTimeout = 15000
+            readTimeout = 30000
+            setRequestProperty("Authorization", "Bearer $token")
+        }
+        try {
+            val status = conn.responseCode
+            if (status == 401) onSessionExpired?.invoke()
+            if (status !in 200..299) {
+                val err = conn.errorStream?.bufferedReader()?.use(BufferedReader::readText) ?: ""
+                throw ApiException(status, extractError(err, status))
+            }
+            conn.inputStream.use { it.readBytes() }
+        } finally {
+            conn.disconnect()
+        }
+    }
+
+    suspend fun deletePhoto(token: String, id: Int) = withContext(Dispatchers.IO) {
+        val (status, text) = rawRequest("DELETE", "/photos/$id", null, token)
+        if (status !in 200..299) throw ApiException(status, extractError(text, status))
+        Unit
+    }
+
+    /**
+     * Envoi multipart, écrit à la main.
+     *
+     * Le corps est construit en mémoire : la photo fait ~200 Ko après passage
+     * par `PhotoStore`, et connaître sa longueur d'avance évite le `chunked`,
+     * que certains proxies mobiles traitent mal.
+     */
+    private fun multipart(path: String, token: String, kind: String, octets: ByteArray): Pair<Int, String> {
+        val limite = "----pmfibre" + System.currentTimeMillis()
+        val saut = "\r\n"
+        val entete = (
+            "--$limite$saut" +
+                "Content-Disposition: form-data; name=\"kind\"$saut$saut$kind$saut" +
+                "--$limite$saut" +
+                "Content-Disposition: form-data; name=\"file\"; filename=\"photo.jpg\"$saut" +
+                "Content-Type: image/jpeg$saut$saut"
+            ).toByteArray(Charsets.UTF_8)
+        val pied = "$saut--$limite--$saut".toByteArray(Charsets.UTF_8)
+
+        val url = URL(baseUrl + path)
+        val conn = (url.openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            connectTimeout = 15000
+            readTimeout = 60000          // 200 Ko sur une 4G de campagne
+            doOutput = true
+            setRequestProperty("Accept", "application/json")
+            setRequestProperty("Authorization", "Bearer $token")
+            setRequestProperty("Content-Type", "multipart/form-data; boundary=$limite")
+            setFixedLengthStreamingMode(entete.size + octets.size + pied.size)
+        }
+        try {
+            conn.outputStream.use { flux ->
+                flux.write(entete); flux.write(octets); flux.write(pied)
+            }
+            val status = conn.responseCode
+            if (status == 401) onSessionExpired?.invoke()
+            val stream = if (status in 200..299) conn.inputStream else conn.errorStream
+            return status to (stream?.bufferedReader()?.use(BufferedReader::readText) ?: "")
+        } finally {
+            conn.disconnect()
+        }
+    }
 
     // ---- Bas niveau HTTP ----
     private fun enc(s: String): String = URLEncoder.encode(s, "UTF-8")

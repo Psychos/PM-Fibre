@@ -595,8 +595,7 @@ composé, sa liste et son défilement sont intacts. Idem pour `AddPmScreen`,
    à chaque déplacement, le cache ne servirait à rien et afficherait un glissement
    de retard.
 9. Terrain : photos, indication d'accès en tête de fiche avec cache hors ligne,
-   étiquettes, deux modes de capture GPS *(§ 3.5, § 3.6, § 3.7)* — *capture GPS
-   faite ; photos, accès et étiquettes à faire*
+   étiquettes, deux modes de capture GPS *(§ 3.5, § 3.6, § 3.7)* — **fait**
 
    La capture précise est dans `GpsCapture.kt` : trente secondes, cinq premières
    jetées, seuls les fixes proches de la meilleure précision observée sont retenus,
@@ -610,6 +609,71 @@ composé, sa liste et son défilement sont intacts. Idem pour `AddPmScreen`,
    (`gps_precis`), avec une liste blanche côté serveur — un client ne teinte pas
    l'historique avec ce qu'il veut, et une valeur inconnue ne fait pas perdre la
    position.
+
+   **Étiquettes et indication d'accès.** Table `pm_tags` (une ligne par étiquette
+   posée) et `pm_access` (une ligne par PM), liste blanche `ETIQUETTES` côté
+   serveur sur les dix slugs du § 3.6. Le `PUT /pm/{code}/tags` reçoit
+   **l'ensemble complet**, pas un ajout : le serveur déduit lui-même les poses et
+   les retraits. C'est ce qui permet au client hors ligne de ne garder qu'un
+   état par fiche au lieu d'une file ordonnée d'ajouts et de retraits, dont
+   l'ordre de rejeu deviendrait la source de bugs. `GET /sync/meta` suit le même
+   contrat incrémental que `/sync/positions` (`since`, `next_since`, `complete`,
+   tombstones), avec un curseur commun aux deux familles.
+
+   Côté téléphone, `MetaStore` écrit **local d'abord**, toujours, réseau ou non :
+   le PM qu'on met un quart d'heure à trouver est justement celui du fond d'une
+   zone sans couverture. Deux drapeaux « sale » par fiche, un par famille,
+   tiennent la règle de résolution : tant qu'une pose locale n'est pas remontée,
+   elle prime sur ce qui descend. Une étiquette inconnue reçue du serveur est
+   conservée et réaffichée telle quelle plutôt qu'ignorée — c'est le sort d'une
+   application pas encore mise à jour, et perdre une information du terrain
+   serait pire que d'afficher un slug brut.
+
+   **Point d'accès distinct** : deuxième couple de coordonnées facultatif sur la
+   même ligne `pm_access`, avec son propre bouton « 🚗 Y aller (accès) ». Une
+   seule des deux coordonnées est refusée des deux côtés (422 côté serveur,
+   message côté app pour que ça vaille aussi hors ligne).
+
+   **Photos.** Stockage adressable par contenu : le nom du fichier est le
+   `sha256` de ses octets. La déduplication est gratuite, deux envois de la même
+   photo ne coûtent qu'une ligne, un identifiant ne change jamais de contenu —
+   donc un cache client sans invalidation à gérer, servi en `immutable`. Le
+   format est reconnu aux octets magiques, pas au `Content-Type` déclaré, et les
+   dimensions sont lues à la main (SOF JPEG, IHDR PNG) pour ne pas ajouter
+   Pillow à l'image Docker. Lecture bornée à `MAX_BYTES + 1` : un client ne
+   dicte pas la mémoire du serveur. Six photos par PM, 2 Mo chacune au plus.
+
+   Côté téléphone, `PhotoStore` réduit à 1 600 px de côté et vise ~200 Ko par
+   qualité JPEG dégressive — une qualité fixe donne 90 Ko sur un mur nu et
+   600 Ko sur une haie. Le sous-échantillonnage précède le décodage (12 Mpx en
+   pleine résolution réclament ~48 Mo de tas), l'orientation EXIF est appliquée
+   aux pixels. La photo part en file d'attente sur-le-champ et l'envoi attend la
+   synchro ; une fois envoyée, ses octets deviennent son cache, sans aller la
+   retélécharger. Une photo refusée pour de bon (PM inconnu, quota, format)
+   quitte la file : la garder ferait retenter le même envoi à chaque ouverture,
+   sur le forfait de l'utilisateur.
+
+   **Écart assumé au § 3.7** : la roadmap décrit « une photo du PM, une de la vue
+   d'approche » comme deux prises de vue attendues. L'application propose deux
+   boutons distincts (« 📷 Le PM », « 📷 L'accès », stockés `kind = pm | acces`)
+   mais n'en rend aucune obligatoire : sur le terrain, imposer la seconde
+   ferait surtout renoncer à la première.
+
+   **Trou comblé hors roadmap** : les photos vivent dans un volume Docker, hors
+   du dump SQL. Une base restaurée aurait pointé sur des fichiers absents. Le
+   script de sauvegarde archive donc aussi `/photos`, mais seulement quand
+   l'empreinte de l'ensemble a changé — inutile de recopier les mêmes octets
+   toutes les nuits.
+
+   **Visible partout, pas seulement dans la fiche** (« icône sur la carte et dans
+   la liste, filtrables », § 3.6) : les icônes d'étiquettes et le 🔑 d'une
+   indication d'accès apparaissent dans les listes Recherche et Autour et dans
+   le dialogue des shelters ; la carte pose un anneau orange sur les PM signalés
+   — un anneau plutôt qu'un pictogramme, pour ne pas masquer la couleur et la
+   forme qui disent le statut de géolocalisation — borné à 150 groupes visibles.
+   L'onglet Autour gagne un troisième filtre « 🙈 Signalés », qui ratisse 300 PM
+   avant de filtrer : les PM signalés sont rares, filtrer les 25 plus proches
+   n'en rendrait souvent aucun.
 10. Interface : trois onglets, `? ⚙`, aide contextuelle, centralisation des
     couleurs puis thèmes *(§ 3.8)* — **fait**
 
