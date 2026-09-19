@@ -87,10 +87,14 @@ import java.util.Locale
 import java.util.TimeZone
 import kotlin.math.roundToInt
 
-private val BlueDark = Color(0xFF0D47A1)
-private val BluePrimary = Color(0xFF1565C0)
-private val GreenOk = Color(0xFF2E7D32)
-private val OrangeWarn = Color(0xFFE65100)
+// Les quatre couleurs de l'application, autrefois écrites en dur ici et recopiées
+// dans `HelpScreen`, `MapScreen` et `themes.xml`. Elles lisent maintenant le thème
+// (voir `Theme.kt`) : les noms d'appel restent, les valeurs suivent le mode clair
+// ou sombre et le contraste élevé choisis par l'utilisateur.
+private val BlueDark: Color @Composable get() = MaterialTheme.colorScheme.primaryContainer
+private val BluePrimary: Color @Composable get() = MaterialTheme.colorScheme.primary
+private val GreenOk: Color @Composable get() = LocalCouleursPm.current.exact
+private val OrangeWarn: Color @Composable get() = LocalCouleursPm.current.avert
 
 // Au-delà de cette précision GPS (mètres), on avertit l'utilisateur avant d'enregistrer.
 private const val POOR_ACCURACY_M = 15.0
@@ -106,8 +110,12 @@ class MainActivity : ComponentActivity() {
             osmdroidBasePath = java.io.File(cacheDir, "osmdroid")
             osmdroidTileCache = java.io.File(osmdroidBasePath, "tiles")
         }
+        // Les préférences d'affichage sont lues AVANT la première composition :
+        // sinon l'application s'ouvrirait une fraction de seconde en clair chez
+        // quelqu'un qui a choisi le mode sombre.
+        Settings.load(applicationContext)
         setContent {
-            MaterialTheme(colorScheme = MaterialTheme.colorScheme.copy(primary = BluePrimary)) {
+            PmFibreTheme {
                 Surface { AppRoot() }
             }
         }
@@ -280,6 +288,8 @@ fun MainScreen(onLogout: () -> Unit) {
     var showAdmin by remember { mutableStateOf(false) }
     var showHelp by remember { mutableStateOf(false) }
     var showDeps by remember { mutableStateOf(false) }
+    var showSettings by remember { mutableStateOf(false) }
+    var aideContexte by remember { mutableStateOf(false) }
     var syncInfo by remember { mutableStateOf<String?>(null) }
     var majDisponible by remember { mutableStateOf<String?>(null) }
     var revision by remember { mutableIntStateOf(0) }   // force le recalcul après un (dé)chargement
@@ -297,9 +307,10 @@ fun MainScreen(onLogout: () -> Unit) {
     // Vérification de mise à jour des données (roadmap 3.4) : au plus une par
     // 24 h, seulement si le réseau est là, jamais bloquante — un échec ne produit
     // rien d'affiché. Elle ne fait qu'allumer un bandeau ; rien ne se télécharge
-    // sans que l'utilisateur ouvre l'écran Départements.
+    // sans que l'utilisateur ouvre l'écran Départements. `reseauAutorise` et non
+    // `reseauDisponible` : le réglage « Wi-Fi seulement » vaut aussi ici.
     LaunchedEffect(Unit) {
-        if (!DepStore.verificationDue(context) || !DepStore.reseauDisponible(context)) {
+        if (!DepStore.verificationDue(context) || !DepStore.reseauAutorise(context)) {
             return@LaunchedEffect
         }
         val installe = DepStore.manifesteLocal(context)?.dataset
@@ -319,6 +330,9 @@ fun MainScreen(onLogout: () -> Unit) {
     // composition et emportait tout son état `remember` : ouvrir une fiche depuis
     // « Autour » puis revenir rendait une liste vide et un fix GPS à refaire.
     // Ici l'écran du dessous reste composé, sa liste et son défilement intacts.
+    //
+    // L'ordre compte : Paramètres est testé en DERNIER, parce que Départements et
+    // Administration s'ouvrent depuis lui et doivent se refermer les premiers.
     val current = selected
     val fermeSousEcran: (() -> Unit)? = when {
         current != null -> ({ selected = null })
@@ -326,12 +340,12 @@ fun MainScreen(onLogout: () -> Unit) {
         showAdmin -> ({ showAdmin = false })
         showHelp -> ({ showHelp = false })
         showDeps -> ({ showDeps = false })
+        showSettings -> ({ showSettings = false })
         else -> null
     }
 
     // Retour système : il n'existait aucun `BackHandler` dans le projet, donc le
-    // geste « retour » quittait l'application depuis n'importe où. Un seul point
-    // d'entrée suffit tant qu'un seul sous-écran est affiché à la fois.
+    // geste « retour » quittait l'application depuis n'importe où.
     var dernierRetour by remember { mutableLongStateOf(0L) }
     BackHandler {
         when {
@@ -353,15 +367,51 @@ fun MainScreen(onLogout: () -> Unit) {
         }
     }
 
+    if (aideContexte) {
+        AideContextuelle(
+            tab = tab,
+            onToutVoir = { aideContexte = false; showHelp = true },
+            onDismiss = { aideContexte = false }
+        )
+    }
+
     Box(Modifier.fillMaxSize()) {
 
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Text("PM Fibre") },
+                    title = {
+                        Text(when (tab) {
+                            0 -> "Recherche"
+                            1 -> "À proximité"
+                            else -> "Carte"
+                        })
+                    },
+                    actions = {
+                        // Deux boutons, toujours à la même place : l'aide de
+                        // l'écran où l'on est, et les réglages. Ils remplacent
+                        // l'onglet « Compte », qui mélangeait profil, fichiers,
+                        // gestion des comptes et déconnexion (roadmap 3.8).
+                        Text("?", fontSize = 22.sp, color = Color.White,
+                            modifier = Modifier
+                                .clickable { aideContexte = true }
+                                .padding(horizontal = 14.dp, vertical = 4.dp))
+                        Box {
+                            Text("⚙", fontSize = 22.sp, color = Color.White,
+                                modifier = Modifier
+                                    .clickable { showSettings = true }
+                                    .padding(start = 6.dp, end = 14.dp, top = 4.dp, bottom = 4.dp))
+                            if (majDisponible != null) {
+                                Text("●", fontSize = 11.sp,
+                                    color = LocalCouleursPm.current.avert,
+                                    modifier = Modifier.align(Alignment.TopEnd).padding(end = 8.dp))
+                            }
+                        }
+                    },
                     colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = BlueDark,
-                        titleContentColor = Color.White
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        titleContentColor = Color.White,
+                        actionIconContentColor = Color.White
                     )
                 )
             },
@@ -377,19 +427,13 @@ fun MainScreen(onLogout: () -> Unit) {
                         selected = tab == 1,
                         onClick = { tab = 1 },
                         icon = { Text("📍", fontSize = 20.sp) },
-                        label = { Text("Autour") }
+                        label = { Text("À proximité") }
                     )
                     NavigationBarItem(
                         selected = tab == 2,
                         onClick = { tab = 2 },
                         icon = { Text("🗺️", fontSize = 20.sp) },
                         label = { Text("Carte") }
-                    )
-                    NavigationBarItem(
-                        selected = tab == 3,
-                        onClick = { tab = 3 },
-                        icon = { Text("ℹ️", fontSize = 20.sp) },
-                        label = { Text("Compte") }
                     )
                 }
             }
@@ -408,21 +452,18 @@ fun MainScreen(onLogout: () -> Unit) {
                 val nbPm = remember(revision) { PmRepository.size }
                 if (nbPm == 0) {
                     Text(
-                        "Aucun département installé — onglet Compte, « Installer un département ».",
+                        "Aucun département installé — touche ici, ou ⚙ Paramètres › Départements.",
                         modifier = Modifier.fillMaxWidth()
-                            .background(Color(0xFFE3F2FD))
+                            .background(LocalCouleursPm.current.bandeau)
                             .clickable { showDeps = true }
                             .padding(12.dp),
-                        fontSize = 14.sp, color = BlueDark
+                        fontSize = 14.sp, color = LocalCouleursPm.current.surBandeau
                     )
                 }
                 when (tab) {
                     0 -> SearchScreen(onSelect = { selected = it }, onAddPm = { showAdd = true })
                     1 -> NearbyScreen(onSelect = { selected = it })
-                    2 -> MapScreen(onSelect = { selected = it })
-                    else -> InfoScreen(syncInfo = syncInfo, onLogout = onLogout,
-                        onOpenAdmin = { showAdmin = true }, onOpenHelp = { showHelp = true },
-                        onOpenDeps = { showDeps = true })
+                    else -> MapScreen(onSelect = { selected = it })
                 }
             }
         }
@@ -440,11 +481,54 @@ fun MainScreen(onLogout: () -> Unit) {
                     showAdmin -> AdminScreen(onBack = { showAdmin = false })
                     showHelp -> HelpScreen(onBack = { showHelp = false })
                     showDeps -> DepScreen(onBack = { showDeps = false }, onChanged = { revision++ })
+                    showSettings -> SettingsScreen(
+                        onBack = { showSettings = false },
+                        onOpenDeps = { showDeps = true },
+                        onOpenAdmin = { showAdmin = true },
+                        onLogout = { showSettings = false; onLogout() },
+                        syncInfo = syncInfo,
+                        majDataset = majDisponible
+                    )
                 }
             }
         }
     }
 }
+
+/**
+ * Aide contextuelle (roadmap 3.8) : quelques lignes sur l'écran où l'on se
+ * trouve, et un lien vers l'aide complète. Quelqu'un qui bute sur la carte ne
+ * devrait pas avoir à traverser le chapitre sur les comptes pour sa réponse.
+ */
+@Composable
+private fun AideContextuelle(tab: Int, onToutVoir: () -> Unit, onDismiss: () -> Unit) {
+    val (titre, texte) = when (tab) {
+        0 -> "Recherche" to
+            "Tape au moins deux caractères : référence du PM, commune ou code postal. " +
+            "Les accents et la casse n'ont pas d'importance.\n\n" +
+            "Le PM que tu cherches n'est pas dans la liste ? Le bouton ➕ permet de " +
+            "l'ajouter ; il sera partagé avec les autres."
+        1 -> "À proximité" to
+            "Les 25 PM les plus proches de toi, recalculés à chaque nouveau point GPS. " +
+            "Tout se fait hors ligne.\n\n" +
+            "Le filtre « À géolocaliser » ne garde que les PM encore placés au centre " +
+            "de leur zone ARCEP : ce sont ceux qu'il reste à relever."
+        else -> "Carte" to
+            "Seuls les PM de la zone affichée sont dessinés : déplace ou zoome pour en " +
+            "voir d'autres.\n\n" +
+            "Rond vert = position relevée sur place. Carré rouge = centre de zone ARCEP, " +
+            "donc à préciser. Un chiffre = plusieurs PM au même endroit (un shelter).\n\n" +
+            "Le bouton en haut bascule entre le plan et la vue aérienne."
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(titre) },
+        text = { Text(texte, fontSize = 14.sp) },
+        confirmButton = { TextButton(onClick = onToutVoir) { Text("▲ Toute l'aide") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Fermer") } }
+    )
+}
+
 
 /** Onglet 1 : recherche d'une PM par code ou commune. */
 @SuppressLint("MissingPermission")
@@ -676,190 +760,6 @@ fun ServingPmCard(serving: ServingPm?, onSelect: (Pm) -> Unit) {
                 Text("Aucune zone ARCEP connue à cet endroit.", fontSize = 13.sp, color = Color.Gray)
             }
         }
-    }
-}
-
-/** Onglet 3 : informations + export/import des positions enregistrées. */
-@Composable
-fun InfoScreen(syncInfo: String?, onLogout: () -> Unit, onOpenAdmin: () -> Unit,
-               onOpenHelp: () -> Unit, onOpenDeps: () -> Unit) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var savedCount by remember { mutableIntStateOf(PmRepository.savedCount) }
-    var message by remember { mutableStateOf("") }
-    var stats by remember { mutableStateOf<ApiClient.Stats?>(null) }
-    var showProfile by remember { mutableStateOf(false) }
-    var showHallOfFame by remember { mutableStateOf(false) }
-
-    if (showHallOfFame) HallOfFameDialog(onDismiss = { showHallOfFame = false })
-
-    LaunchedEffect(Unit) {
-        val token = SessionStore.token ?: return@LaunchedEffect
-        try { stats = ApiClient.fetchMyStats(token) } catch (_: Exception) {}
-    }
-
-    if (showProfile) {
-        ProfileDialog(
-            onDismiss = { showProfile = false },
-            onSave = { email, current, newPass ->
-                val token = SessionStore.token
-                if (token != null) {
-                    scope.launch {
-                        try {
-                            ApiClient.updateProfile(token, email, current, newPass)
-                            showProfile = false
-                            Toast.makeText(context, "Profil mis à jour ✅", Toast.LENGTH_SHORT).show()
-                        } catch (e: Exception) {
-                            Toast.makeText(context, errorMessage(e), Toast.LENGTH_LONG).show()
-                        }
-                    }
-                }
-            }
-        )
-    }
-
-    val exportLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/json")
-    ) { uri: Uri? ->
-        if (uri != null) {
-            try {
-                context.contentResolver.openOutputStream(uri)?.use {
-                    it.write(PmRepository.exportJson().toByteArray())
-                }
-                message = "Base exportée ($savedCount position(s))."
-            } catch (e: Exception) {
-                message = "Échec de l'export : ${e.message}"
-            }
-        }
-    }
-
-    val importLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument()
-    ) { uri: Uri? ->
-        if (uri != null) {
-            try {
-                val text = context.contentResolver.openInputStream(uri)
-                    ?.bufferedReader()?.use { it.readText() } ?: ""
-                val n = PmRepository.importJson(context, text)
-                savedCount = PmRepository.savedCount
-                message = "$n position(s) importée(s)."
-            } catch (e: Exception) {
-                message = "Échec de l'import : ${e.message}"
-            }
-        }
-    }
-
-    Column(
-        modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())
-    ) {
-        Text("Données", fontWeight = FontWeight.Bold, fontSize = 20.sp)
-        Spacer(Modifier.height(8.dp))
-        val manifeste = remember { DepStore.manifesteLocal(context) }
-        val deps = remember { DepStore.installes(context) }
-        Text("Source : ARCEP — ${manifeste?.dataset ?: "ZAPM"} (open data)")
-        Text("Nombre de PM : ${PmRepository.size}")
-        Text("Positions exactes enregistrées : $savedCount", fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(8.dp))
-        OutlinedButton(onClick = onOpenDeps) {
-            Text(if (deps.isEmpty()) "📦 Installer un département"
-                 else "📦 Départements (${deps.size}) : " + deps.joinToString(", "))
-        }
-
-        Spacer(Modifier.height(20.dp))
-        Text("Compte", fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(4.dp))
-        Text("Connecté : ${SessionStore.username ?: "—"}" + if (SessionStore.isAdmin) " (admin)" else "", fontSize = 14.sp)
-        stats?.let {
-            Text("Mes contributions : ${it.positions} position(s) · ${it.confirmations} confirmation(s) · ${it.comments} commentaire(s)",
-                fontSize = 14.sp, fontWeight = FontWeight.Bold, color = BluePrimary)
-        }
-        syncInfo?.let { Text(it, fontSize = 13.sp, color = Color.Gray) }
-        Spacer(Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = { showProfile = true }) { Text("⚙️ Mon profil") }
-            OutlinedButton(onClick = {
-                SessionStore.clear(context)
-                onLogout()
-            }) { Text("🔓 Se déconnecter") }
-        }
-        Spacer(Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = { showHallOfFame = true }) { Text("🏆 Hall of Fame") }
-            OutlinedButton(onClick = onOpenHelp) { Text("❓ Aide") }
-            if (SessionStore.isAdmin) {
-                OutlinedButton(onClick = onOpenAdmin) { Text("👥 Comptes") }
-            }
-        }
-        Spacer(Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = { openUrl(context, "https://mapm.online") }) {
-                Text("🔄 Vérifier mise à jour")
-            }
-            OutlinedButton(onClick = { openUrl(context, "https://github.com/Psychos/PM-Fibre") }) {
-                Text("💻 Code source (GitHub)")
-            }
-        }
-        Spacer(Modifier.height(8.dp))
-        OutlinedButton(onClick = {
-            val token = SessionStore.token
-            if (token != null) {
-                scope.launch {
-                    message = "Synchronisation…"
-                    try {
-                        val r = Sync.run(context, token)
-                        savedCount = PmRepository.savedCount
-                        stats = try { ApiClient.fetchMyStats(token) } catch (_: Exception) { stats }
-                        message = "Synchronisé : $r"
-                    } catch (e: Exception) {
-                        message = "Échec synchro : ${errorMessage(e)}"
-                    }
-                }
-            }
-        }) { Text("🔄 Synchroniser maintenant") }
-
-        Spacer(Modifier.height(20.dp))
-        Text("Copie de secours (fichier)", fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(4.dp))
-        Text(
-            "En temps normal, tout est déjà partagé automatiquement via le serveur. " +
-                "Ces boutons servent uniquement à sauvegarder les positions de ce téléphone " +
-                "dans un fichier, ou à récupérer un fichier exporté ailleurs.",
-            fontSize = 13.sp, color = Color.Gray
-        )
-        Spacer(Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(
-                onClick = {
-                    val name = "pm_positions_${SimpleDateFormat("yyyyMMdd", Locale.FRANCE).format(Date())}.json"
-                    exportLauncher.launch(name)
-                }
-            ) { Text("📤 Exporter un fichier") }
-            OutlinedButton(
-                onClick = { importLauncher.launch(arrayOf("application/json", "text/*")) }
-            ) { Text("📥 Importer un fichier") }
-        }
-        if (message.isNotEmpty()) {
-            Spacer(Modifier.height(8.dp))
-            Text(message)
-        }
-
-        Spacer(Modifier.height(20.dp))
-        Text("À propos des positions", fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(4.dp))
-        Text(
-            "• ✅ Géoloc précise : position enregistrée sur le terrain par un utilisateur.\n" +
-                "• ≈ Approximative : estimation (centre de zone) pour t'orienter la première fois.\n\n" +
-                "Pour enregistrer une position : ouvre la fiche du PM quand tu es devant, " +
-                "puis « 📍 Enregistrer la position exacte ».",
-            fontSize = 14.sp
-        )
-
-        Spacer(Modifier.height(24.dp))
-        Text(
-            "Pour me soumettre des bugs ou des proposition(s) d'amélioration(s) " +
-                "veuillez envoyer un mail à fibre27@free.fr",
-            fontSize = 13.sp, color = Color.Gray
-        )
     }
 }
 

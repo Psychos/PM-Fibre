@@ -10,6 +10,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -21,12 +22,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-private val HelpBlueDark = Color(0xFF0D47A1)
 
 @Composable
 private fun HelpTitle(text: String) {
     Spacer(Modifier.height(16.dp))
-    Text(text, fontWeight = FontWeight.Bold, fontSize = 17.sp, color = HelpBlueDark)
+    Text(text, fontWeight = FontWeight.Bold, fontSize = 17.sp,
+        color = MaterialTheme.colorScheme.primary)
     Spacer(Modifier.height(6.dp))
 }
 
@@ -48,7 +49,8 @@ fun HelpScreen(onBack: () -> Unit) {
                         modifier = Modifier.clickable { onBack() }.padding(start = 12.dp, end = 4.dp))
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = HelpBlueDark, titleContentColor = Color.White,
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    titleContentColor = Color.White,
                     navigationIconContentColor = Color.White
                 )
             )
@@ -57,11 +59,26 @@ fun HelpScreen(onBack: () -> Unit) {
         Column(
             Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)
         ) {
-            Text("PM Fibre", fontWeight = FontWeight.Bold, fontSize = 22.sp, color = HelpBlueDark)
+            Text("PM Fibre", fontWeight = FontWeight.Bold, fontSize = 22.sp,
+                color = MaterialTheme.colorScheme.primary)
             HelpBody(
                 "Base collaborative des Points de Mutualisation : chacun enregistre les positions " +
                     "exactes sur le terrain, tout le monde en profite. Les 103 départements sont " +
                     "couverts ; tu télécharges seulement ceux où tu travailles."
+            )
+
+            HelpTitle("🧭 Se repérer dans l'application")
+            HelpBody(
+                "Trois onglets en bas : 🔍 Recherche, 📍 À proximité, 🗺️ Carte. " +
+                    "C'est tout ce qui sert sur le terrain.\n\n" +
+                    "En haut à droite, deux boutons toujours au même endroit :\n" +
+                    "•  ?  l'aide de l'écran où tu te trouves ;\n" +
+                    "•  ⚙  les paramètres : départements, affichage, carte, profil, données, " +
+                    "mises à jour, et la gestion des comptes pour les administrateurs.\n\n" +
+                    "Une pastille orange sur ⚙ signale une nouvelle version des données.\n\n" +
+                    "Le bouton retour du téléphone referme l'écran ouvert, puis ramène à " +
+                    "l'onglet Recherche. Sur cet onglet, il faut appuyer deux fois pour quitter : " +
+                    "un retour malencontreux ne doit pas coûter un relèvement GPS."
             )
 
             HelpTitle("🔣 Légendes")
@@ -81,7 +98,8 @@ fun HelpScreen(onBack: () -> Unit) {
             HelpTitle("📦 Départements")
             HelpBody(
                 "L'application démarre VIDE, c'est normal : les données ne sont plus embarquées. " +
-                    "Onglet Compte → « 📦 Départements », coche ceux dont tu as besoin. Chaque " +
+                    "⚙ en haut à droite → « 📦 Départements », coche ceux dont tu as besoin. " +
+                    "Chaque " +
                     "département pèse environ 80 Ko et se télécharge en un instant.\n\n" +
                     "• Six départements au maximum à la fois. Au-delà, décoche-en un — rien ne " +
                     "s'efface définitivement, un département déchargé se réinstalle quand tu veux.\n" +
@@ -149,7 +167,7 @@ fun HelpScreen(onBack: () -> Unit) {
             HelpTitle("🔄 Synchronisation")
             HelpBody(
                 "Automatique à chaque ouverture : tes captures partent au serveur, celles des " +
-                    "collègues arrivent. Bouton « Synchroniser maintenant » dans l'onglet Compte.\n\n" +
+                    "collègues arrivent. Bouton « Synchroniser maintenant » dans ⚙ → Données.\n\n" +
                     "Elle ne rapatrie que les départements que tu as installés : inutile de " +
                     "descendre la France entière pour travailler sur deux départements.\n\n" +
                     "Hors réseau : la recherche, les fiches et les positions déjà connues restent " +

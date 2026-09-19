@@ -611,7 +611,38 @@ composé, sa liste et son défilement sont intacts. Idem pour `AddPmScreen`,
    l'historique avec ce qu'il veut, et une valeur inconnue ne fait pas perdre la
    position.
 10. Interface : trois onglets, `? ⚙`, aide contextuelle, centralisation des
-    couleurs puis thèmes *(§ 3.8)*
+    couleurs puis thèmes *(§ 3.8)* — **fait**
+
+    Les couleurs d'abord, comme prévu : `Theme.kt` porte quatre palettes (clair /
+    sombre × normal / contraste élevé) et un `LocalCouleursPm` pour les teintes
+    métier qui n'entrent dans aucun rôle Material — le vert d'une position relevée,
+    le rouge d'un centre de zone, l'orange d'un avertissement, le bleu de « moi ».
+    `BluePrimary`, `HelpBlueDark`, `PmExactColor`, `PmApproxColor` ont disparu au
+    profit du thème ; les quatre noms d'appel de `MainActivity` survivent en
+    propriétés `@Composable` pour ne pas réécrire dix-neuf sites d'un coup.
+
+    La taille du texte passe par `LocalDensity`/`fontScale` et non par une
+    `Typography` : la plupart des textes de l'app donnent leur taille en dur
+    (`fontSize = 14.sp`) et une typographie Material les laisserait intacts.
+
+    `Settings` (SharedPreferences, calqué sur `SessionStore`) est relu **avant**
+    `setContent` : sinon l'application s'ouvrirait une fraction de seconde en clair
+    chez quelqu'un qui a choisi le mode sombre. Un `values-night/themes.xml` évite
+    le même éclair blanc au niveau de la fenêtre Android.
+
+    L'onglet Compte (`InfoScreen`, 180 lignes) est supprimé, ses fonctions
+    réparties dans les huit rubriques de `SettingsScreen`. Restent trois onglets et
+    une `TopAppBar` commune portant `?` et `⚙`, le badge de mise à jour sur
+    l'engrenage. Le `?` est contextuel : trois à quatre lignes sur l'écran courant
+    et un bouton « ▲ Toute l'aide ».
+
+    Écart assumé : la `TopAppBar` n'est ni masquée ni affinée sur l'onglet Carte.
+    Elle y porte le titre de l'onglet et les deux boutons ; les masquer obligerait
+    à refaire flotter `?` et `⚙` au-dessus de la carte, pour quarante pixels.
+
+    Le réglage « Wi-Fi seulement » est branché (`DepStore.reseauAutorise`, utilisé
+    par la vérification automatique et pas par une action lancée à la main), de
+    même que le fond de carte par défaut, les libellés et la taille des points.
 
 Le point 5 est celui auquel on ne pense pas et qui fait toute la différence : la
 séance a défini précisément ce qu'on voudra stocker, autant poser les tables

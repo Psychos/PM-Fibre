@@ -35,6 +35,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -79,8 +80,6 @@ private const val ZOOM_CERCLE = 16.0
 /** Garde-fou : au-delà, on n'affiche plus tout, on demande de zoomer. */
 private const val MAX_POINTS = 3000
 
-private val PmExactColor = AndroidColor.rgb(0x2E, 0x7D, 0x32)   // vert : position relevée sur place
-private val PmApproxColor = AndroidColor.rgb(0xD3, 0x2F, 0x2F)  // rouge : centre de zone ARCEP
 
 /**
  * Fond orthophotographique IGN (roadmap 3.7) : BD ORTHO 20 cm/pixel, flux WMTS
@@ -157,12 +156,20 @@ fun MapScreen(onSelect: (Pm) -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val densite = context.resources.displayMetrics.density
+    val couleurs = LocalCouleursPm.current
+    // Les points sont dessinés par osmdroid, en dehors de Compose : la couleur
+    // du thème doit être convertie en entier ARGB Android.
+    val couleurExact = couleurs.exact.toArgb()
+    val couleurApprox = couleurs.approx.toArgb()
+    val rayonPoint = if (Settings.cartePointsGros) 9f else 6f
 
     var maPosition by remember { mutableStateOf<GeoPoint?>(null) }
     var groupes by remember { mutableStateOf<List<GroupePm>>(emptyList()) }
     var zoom by remember { mutableDoubleStateOf(16.0) }
     var status by remember { mutableStateOf("Localisation…") }
-    var ortho by remember { mutableStateOf(false) }
+    // Fond ouvert par défaut : le réglage de l'utilisateur, pas une constante.
+    // La bascule du haut reste disponible, elle ne vaut que pour cette session.
+    var ortho by remember { mutableStateOf(Settings.carteFond == FondCarte.ORTHO) }
     var choix by remember { mutableStateOf<GroupePm?>(null) }
 
     // Configurer osmdroid AVANT de créer la MapView (user-agent obligatoire pour les tuiles).
@@ -298,8 +305,12 @@ fun MapScreen(onSelect: (Pm) -> Unit) {
                         if (prec < 10.0) continue
                         map.overlays.add(Polygon(map).apply {
                             points = Polygon.pointsAsCircle(GeoPoint(g.lat, g.lon), prec)
-                            fillPaint.color = AndroidColor.argb(40, 0x2E, 0x7D, 0x32)
-                            outlinePaint.color = AndroidColor.argb(120, 0x2E, 0x7D, 0x32)
+                            fillPaint.color = AndroidColor.argb(40,
+                                AndroidColor.red(couleurExact), AndroidColor.green(couleurExact),
+                                AndroidColor.blue(couleurExact))
+                            outlinePaint.color = AndroidColor.argb(120,
+                                AndroidColor.red(couleurExact), AndroidColor.green(couleurExact),
+                                AndroidColor.blue(couleurExact))
                             outlinePaint.strokeWidth = 1f * densite
                         })
                     }
@@ -309,13 +320,15 @@ fun MapScreen(onSelect: (Pm) -> Unit) {
                 // couleur : environ 8 % des hommes confondent le vert et le rouge,
                 // et c'est justement la population du terrain.
                 ajouteCouche(
-                    map, groupes.filter { it.exact }, PmExactColor,
+                    map, groupes.filter { it.exact }, couleurExact,
                     SimpleFastPointOverlayOptions.Shape.CIRCLE, densite,
+                    rayonPoint, Settings.carteLibelles,
                     onUn = onSelect, onPlusieurs = { choix = it }
                 )
                 ajouteCouche(
-                    map, groupes.filter { !it.exact }, PmApproxColor,
+                    map, groupes.filter { !it.exact }, couleurApprox,
                     SimpleFastPointOverlayOptions.Shape.SQUARE, densite,
+                    rayonPoint, Settings.carteLibelles,
                     onUn = onSelect, onPlusieurs = { choix = it }
                 )
 
@@ -381,6 +394,8 @@ private fun ajouteCouche(
     couleur: Int,
     forme: SimpleFastPointOverlayOptions.Shape,
     densite: Float,
+    rayon: Float,
+    libelles: Boolean,
     onUn: (Pm) -> Unit,
     onPlusieurs: (GroupePm) -> Unit
 ) {
@@ -391,7 +406,7 @@ private fun ajouteCouche(
     val style = SimpleFastPointOverlayOptions.getDefaultStyle()
         .setAlgorithm(SimpleFastPointOverlayOptions.RenderingAlgorithm.MEDIUM_OPTIMIZATION)
         .setSymbol(forme)
-        .setRadius(6f * densite)
+        .setRadius(rayon * densite)
         .setIsClickable(true)
         .setCellSize((16 * densite).toInt())
         .setPointStyle(Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -409,7 +424,9 @@ private fun ajouteCouche(
             setShadowLayer(2f, 0f, 0f, AndroidColor.WHITE)
         })
         .setLabelPolicy(SimpleFastPointOverlayOptions.LabelPolicy.ZOOM_THRESHOLD)
-        .setMinZoomShowLabels(ZOOM_LABELS)
+        // Libellés coupés : un seuil de zoom inatteignable vaut mieux qu'une
+        // seconde branche de style à maintenir.
+        .setMinZoomShowLabels(if (libelles) ZOOM_LABELS else 99)
 
     val overlay = SimpleFastPointOverlay(SimplePointTheme(points, true), style)
     overlay.setOnClickListener { _, index ->

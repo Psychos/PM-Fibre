@@ -106,6 +106,10 @@ object DepStore {
         prefs(context).edit().putLong(K_DERNIERE_VERIF, System.currentTimeMillis()).apply()
     }
 
+    /** Horodatage de la dernière vérification, ou 0 si elle n'a jamais eu lieu. */
+    fun derniereVerification(context: Context): Long =
+        prefs(context).getLong(K_DERNIERE_VERIF, 0L)
+
     /** « Ignorer cette version » (roadmap 3.4) : plus de bandeau pour ce millésime. */
     fun ignore(context: Context, dataset: String) {
         prefs(context).edit().putString(K_IGNORE, dataset).apply()
@@ -120,6 +124,22 @@ object DepStore {
         val reseau = cm.activeNetwork ?: return false
         val caps = cm.getNetworkCapabilities(reseau) ?: return false
         return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+    }
+
+    /**
+     * Réseau utilisable pour une vérification automatique. Si l'utilisateur a
+     * demandé « Wi-Fi seulement », la 4G ne compte pas : certains forfaits de
+     * terrain sont comptés au mégaoctet, et une vérification n'est jamais urgente.
+     * Une action lancée à la main, elle, ignore ce réglage.
+     */
+    fun reseauAutorise(context: Context): Boolean {
+        if (!reseauDisponible(context)) return false
+        if (!Settings.majWifiSeulement) return true
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+            ?: return false
+        val caps = cm.getNetworkCapabilities(cm.activeNetwork ?: return false) ?: return false
+        return caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
+            caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
     }
 
     @Suppress("DEPRECATION")

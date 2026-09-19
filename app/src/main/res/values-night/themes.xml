@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Variante nuit : sans elle, le thème de fenêtre resterait « Material.Light » et
+  l'application s'ouvrirait sur un éclair blanc avant que Compose ne dessine sa
+  première surface sombre. La barre d'état garde le même bleu dans les deux modes.
+-->
+<resources>
+    <style name="Theme.PmFibre" parent="android:Theme.Material.NoActionBar">
+        <item name="android:statusBarColor">#0D47A1</item>
+    </style>
+</resources>

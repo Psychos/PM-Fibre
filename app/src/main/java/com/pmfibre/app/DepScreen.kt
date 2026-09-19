@@ -20,6 +20,7 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -164,7 +165,7 @@ fun DepScreen(onBack: () -> Unit, onChanged: () -> Unit) {
                             region.uppercase(),
                             fontSize = 12.sp, fontWeight = FontWeight.Bold, color = DepGris,
                             modifier = Modifier.fillMaxWidth()
-                                .background(Color(0xFFF0F0F0))
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
                                 .padding(horizontal = 16.dp, vertical = 6.dp)
                         )
                     }
@@ -275,7 +276,7 @@ private fun resume(d: DepStore.Diff): String = when {
 fun BandeauMiseAJour(dataset: String, onOuvrir: () -> Unit, onPlusTard: () -> Unit,
                      onIgnorer: () -> Unit) {
     Column(
-        Modifier.fillMaxWidth().background(Color(0xFFFFF8E1)).padding(12.dp)
+        Modifier.fillMaxWidth().background(LocalCouleursPm.current.bandeau).padding(12.dp)
     ) {
         Text("Nouvelles données ARCEP disponibles ($dataset).",
             fontSize = 14.sp, fontWeight = FontWeight.Bold)
