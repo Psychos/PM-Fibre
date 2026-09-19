@@ -99,6 +99,10 @@ def on_startup() -> None:
 
 @app.get("/health")
 def health():
+    # Un import refusé laisse l'API parfaitement fonctionnelle sur l'ancien
+    # millésime : sans ce signal, la seule trace serait une ligne de journal.
+    if importer.dernier_refus:
+        return {"status": "degraded", "import": importer.dernier_refus}
     return {"status": "ok"}
 
 

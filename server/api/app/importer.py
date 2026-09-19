@@ -49,6 +49,16 @@ TAILLE_LOT = 1000
 _COLONNES_ARCEP = ("oi", "op", "com", "dep", "dep_code", "etat", "date_pm", "lgt", "tot")
 
 
+class LotIncomplet(RuntimeError):
+    """Les paquets ne forment pas l'ensemble annoncé : on n'importe rien."""
+
+
+#: Dernier import refusé, exposé par `/health`. Un import qui ne se fait pas
+#: n'a aucun symptôme visible — la base garde simplement l'ancien millésime —
+#: et une ligne de journal dans un conteneur ne réveille personne.
+dernier_refus: dict | None = None
+
+
 def _date(valeur: str | None):
     if not valeur:
         return None
@@ -93,8 +103,19 @@ def importe(db: OrmSession, version: str) -> dict:
     avant = db.scalar(select(func.count()).select_from(Pm.__table__)) or 0
     vus = 0
 
+    # Le lot a été validé juste avant ; ce second contrôle, lui, tient pendant
+    # le balayage. Une régénération des paquets en cours d'import remplacerait
+    # des archives sous nos pieds, et la seule trace serait un département qui
+    # rend soudain zéro fiche.
+    attendues = {d["code"]: d.get("pm") for d in packages.departements() if d.get("code")}
+
     for code_dep in packages.codes_departements():
         fiches = packages.pm_du_departement(code_dep)
+        attendu = attendues.get(code_dep)
+        if isinstance(attendu, int) and len(fiches) != attendu:
+            raise LotIncomplet(
+                f"{code_dep} : {len(fiches)} fiches lues pendant l'import, "
+                f"{attendu} annoncees")
         lot: list[dict] = []
         for fiche in fiches:
             if not fiche.get("code"):
@@ -185,8 +206,23 @@ def protege_suppressions_anterieures(db: OrmSession) -> int:
     return deja
 
 
+def _refuse(version: str, anomalies: list[str]) -> None:
+    """Journalise un refus d'import et le garde pour `/health`."""
+    global dernier_refus
+    dernier_refus = {"version": version, "anomalies": anomalies[:20],
+                     "total": len(anomalies)}
+    log.error("Import ARCEP %s REFUSE : %d anomalie(s). Le millesime n'est pas "
+              "enregistre : corriger les paquets puis redemarrer l'API relance "
+              "l'import a zero.", version, len(anomalies))
+    for a in anomalies[:20]:
+        log.error("  %s", a)
+    if len(anomalies) > 20:
+        log.error("  ... et %d autre(s)", len(anomalies) - 20)
+
+
 def importe_si_necessaire(db: OrmSession, get_setting, set_setting) -> dict | None:
     """Point d'entrée au démarrage. None si les paquets sont déjà en base."""
+    global dernier_refus
     version = packages.version_donnees()
     if not version:
         log.warning("Aucun manifeste dans %s : import ignore", packages.PACKAGES_DIR)
@@ -195,13 +231,31 @@ def importe_si_necessaire(db: OrmSession, get_setting, set_setting) -> dict | No
     if get_setting(db, CLE_VERSION) == version:
         return None
 
+    # Tout ou rien (§ F04). Importer un lot amputé coûterait le retrait des PM
+    # des départements manquants — et le millésime serait enregistré, donc
+    # aucun redémarrage ne rattraperait la perte.
+    anomalies = packages.verifie_lot()
+    if anomalies:
+        _refuse(version, anomalies)
+        return None
+
     # Premier démarrage sous le schéma versionné, sur une base où l'amorçage
     # historique a déjà tourné : rattraper les suppressions qu'il ignorait.
     if not get_setting(db, CLE_VERSION) and get_setting(db, "osm_seed_done") == "1":
         protege_suppressions_anterieures(db)
 
-    log.info("Import ARCEP %s : demarrage", version)
-    bilan = importe(db, version)
+    log.info("Import ARCEP %s : demarrage (%d paquets verifies)",
+             version, len(packages.codes_departements()))
+    try:
+        bilan = importe(db, version)
+    except LotIncomplet as e:
+        # Les écritures déjà validées restent, mais elles portent le nouveau
+        # millésime sans que rien n'ait été retiré ni enregistré : le prochain
+        # démarrage refera le balayage entier. C'est la reprise.
+        db.rollback()
+        _refuse(version, [str(e)])
+        return None
+    dernier_refus = None
     bilan["positions_osm"] = amorce_positions_osm(db)
     set_setting(db, CLE_VERSION, version)
     db.commit()

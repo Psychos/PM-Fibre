@@ -16,6 +16,7 @@ Deux usages, volontairement distincts :
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import tarfile
@@ -113,6 +114,85 @@ def zones_du_departement(code: str) -> dict:
         while len(_zones_cache) > CACHE_MAX_DEPS:
             _zones_cache.popitem(last=False)
     return zones
+
+
+def _verifie_paquet(code: str, entree: dict) -> str | None:
+    """Anomalie constatée sur un paquet, ou None s'il est conforme au manifeste.
+
+    On s'arrête à la première anomalie : les quatre contrôles vont du moins cher
+    au plus cher, et un paquet dont la taille est déjà fausse n'a rien à
+    apprendre de plus.
+    """
+    chemin = _chemin_paquet(code)
+    if not chemin.is_file():
+        return f"{code} : paquet absent ({chemin})"
+
+    taille = chemin.stat().st_size
+    attendue = entree.get("size")
+    if isinstance(attendue, int) and taille != attendue:
+        return f"{code} : {taille} octets, {attendue} annonces"
+
+    empreinte = entree.get("sha256")
+    if empreinte:
+        h = hashlib.sha256()
+        try:
+            with open(chemin, "rb") as f:
+                for bloc in iter(lambda: f.read(1 << 20), b""):
+                    h.update(bloc)
+        except OSError as e:
+            return f"{code} : paquet illisible ({e})"
+        if h.hexdigest() != empreinte:
+            return (f"{code} : empreinte {h.hexdigest()[:12]}..., "
+                    f"{empreinte[:12]}... annoncee")
+
+    # Jusqu'ici on a validé une archive ; reste à valider ce qu'elle contient,
+    # car c'est `pm.json` — et lui seul — que l'import balaie.
+    fiches = _lit_membre(code, "pm.json")
+    if fiches is None:
+        return f"{code} : pm.json absent ou illisible dans le paquet"
+    if not isinstance(fiches, list):
+        return f"{code} : pm.json n'est pas une liste"
+    attendues = entree.get("pm")
+    if isinstance(attendues, int) and len(fiches) != attendues:
+        return f"{code} : {len(fiches)} fiches, {attendues} annoncees"
+    return None
+
+
+def verifie_lot(recharge: bool = False) -> list[str]:
+    """Contrôle **l'ensemble** des paquets annoncés, avant tout import.
+
+    Un paquet absent ou abîmé ne se voit pas : `_lit_membre` rend `None`,
+    `pm_du_departement` rend une liste vide, et l'import conclut sincèrement que
+    le département est vide — il retire ses PM, puis enregistre le millésime
+    comme importé. Le redémarrage suivant ne retente donc rien : la panne est
+    silencieuse et définitive.
+
+    D'où un contrôle *préalable* et *global*. Préalable, parce qu'un import à
+    moitié fait laisse une base incohérente ; global, parce que refuser le lot
+    entier est la seule décision sûre quand on ne sait pas lequel des 103
+    paquets manque.
+
+    Renvoie la liste des anomalies — vide si le lot est sain.
+    """
+    m = manifeste(recharge=recharge)
+    if not m:
+        return [f"manifeste absent ou illisible dans {PACKAGES_DIR}"]
+    if not m.get("dataset"):
+        return ["manifeste sans millesime (cle « dataset »)"]
+    deps = m.get("deps") or []
+    if not deps:
+        return ["manifeste sans departements (cle « deps »)"]
+
+    anomalies: list[str] = []
+    for d in deps:
+        code = d.get("code")
+        if not code:
+            anomalies.append(f"entree de manifeste sans code : {d!r}")
+            continue
+        souci = _verifie_paquet(code, d)
+        if souci:
+            anomalies.append(souci)
+    return anomalies
 
 
 def vide_cache() -> None:
