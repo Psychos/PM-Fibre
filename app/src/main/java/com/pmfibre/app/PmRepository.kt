@@ -19,7 +19,43 @@ import kotlin.math.sqrt
  *  `synced` = présente côté serveur (ne doit plus être re-poussée ; purgée si supprimée là-bas). */
 data class SavedPos(
     val lat: Double, val lon: Double, val ts: Long, val note: String?,
-    val author: String? = null, val accuracyM: Double? = null, val synced: Boolean = false
+    val author: String? = null, val accuracyM: Double? = null, val synced: Boolean = false,
+    /** Saisie au clavier sur la carte, et non relevée par le GPS. Le serveur en
+     *  fait un contrôle de zone strict (100 m au lieu de 500) — encore faut-il
+     *  qu'il l'apprenne, et une capture faite hors ligne ne remonte que ce que
+     *  ce fichier a retenu (§ F07). */
+    val manual: Boolean = false,
+    /** Comment la position a été obtenue : `gps_precis` pour un relevé moyenné
+     *  sur trente secondes, `manuel`, ou null pour un fix unique. */
+    val method: String? = null
+)
+
+/** Écrit une position enregistrée au format du fichier local.
+ *
+ *  La (dé)sérialisation est sortie du dépôt pour être éprouvable sans Android :
+ *  c'est le format d'un fichier qui survit aux mises à jour de l'application, et
+ *  un champ oublié d'un côté ne se voit pas à la lecture du code. */
+fun SavedPos.enJson(): JSONObject = JSONObject().apply {
+    put("lat", lat); put("lon", lon); put("ts", ts)
+    if (note != null) put("note", note)
+    if (author != null) put("author", author)
+    if (accuracyM != null) put("acc", accuracyM)
+    if (synced) put("s", 1)
+    if (manual) put("m", 1)
+    if (method != null) put("meth", method)
+}
+
+/** Relit une position enregistrée. Un fichier écrit par une version antérieure
+ *  n'a ni `m` ni `meth` : la capture est alors tenue pour un relevé GPS, ce
+ *  qu'elle était dans l'immense majorité des cas. */
+fun savedPosDepuisJson(e: JSONObject): SavedPos = SavedPos(
+    e.getDouble("lat"), e.getDouble("lon"),
+    e.optLong("ts", 0L), e.optString("note", "").ifEmpty { null },
+    e.optString("author", "").ifEmpty { null },
+    if (e.has("acc")) e.getDouble("acc") else null,
+    e.optInt("s", 0) == 1,
+    e.optInt("m", 0) == 1,
+    e.optString("meth", "").ifEmpty { null }
 )
 
 /** Vue d'un PM avec la position effective (enregistrée si elle existe, sinon approximative). */
@@ -189,10 +225,14 @@ object PmRepository {
     }
 
     fun saveExact(context: Context, code: String, lat: Double, lon: Double, note: String?,
-                  author: String? = null, accuracyM: Double? = null, synced: Boolean = false) {
+                  author: String? = null, accuracyM: Double? = null, synced: Boolean = false,
+                  manual: Boolean = false, method: String? = null) {
         val prev = saved[code]
+        // `manual` et `method` décrivent la capture qu'on enregistre à l'instant :
+        // pas d'héritage de la précédente, contrairement à l'auteur et à la
+        // précision, qu'on préfère garder plutôt que perdre.
         saved[code] = SavedPos(lat, lon, System.currentTimeMillis(), note?.ifBlank { null },
-            author ?: prev?.author, accuracyM ?: prev?.accuracyM, synced)
+            author ?: prev?.author, accuracyM ?: prev?.accuracyM, synced, manual, method)
         persistSaved(context)
     }
 
@@ -232,8 +272,13 @@ object PmRepository {
                 continue
             }
             val ts = parseIsoMillis(p.updatedAt) ?: existing?.ts ?: System.currentTimeMillis()
+            // La précision et le mode suivent la position : garder ceux de
+            // l'ancienne entrée les ferait décrire un relevé qui n'est plus là.
+            // `manual` retombe à false — la ligne est déjà côté serveur, elle
+            // n'a plus de contrôle de zone à subir.
             saved[p.code] = SavedPos(p.lat, p.lon, ts, existing?.note,
-                p.author ?: existing?.author, existing?.accuracyM, synced = true)
+                p.author ?: existing?.author, p.accuracyM ?: existing?.accuracyM,
+                synced = true, manual = false, method = p.method)
             appliquees++
         }
         for (code in r.deleted) {
@@ -339,13 +384,7 @@ object PmRepository {
             val o = JSONObject(texte)
             for (k in o.keys()) {
                 val e = o.getJSONObject(k)
-                lues[k] = SavedPos(
-                    e.getDouble("lat"), e.getDouble("lon"),
-                    e.optLong("ts", 0L), e.optString("note", "").ifEmpty { null },
-                    e.optString("author", "").ifEmpty { null },
-                    if (e.has("acc")) e.getDouble("acc") else null,
-                    e.optInt("s", 0) == 1
-                )
+                lues[k] = savedPosDepuisJson(e)
             }
             saved.clear()
             saved.putAll(lues)
@@ -366,15 +405,7 @@ object PmRepository {
     /** Exporte la base de positions enregistrées en JSON. */
     fun exportJson(): String {
         val o = JSONObject()
-        for ((code, s) in saved) {
-            o.put(code, JSONObject().apply {
-                put("lat", s.lat); put("lon", s.lon); put("ts", s.ts)
-                if (s.note != null) put("note", s.note)
-                if (s.author != null) put("author", s.author)
-                if (s.accuracyM != null) put("acc", s.accuracyM)
-                if (s.synced) put("s", 1)
-            })
-        }
+        for ((code, s) in saved) o.put(code, s.enJson())
         return o.toString(2)
     }
 

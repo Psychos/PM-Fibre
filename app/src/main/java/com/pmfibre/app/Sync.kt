@@ -51,7 +51,13 @@ object Sync {
         var uploaded = 0
         for ((code, p) in PmRepository.locallyOwnedPositions(me)) {
             try {
-                ApiClient.putPosition(token, code, p.lat, p.lon, p.accuracyM)
+                // `manual` et `method` décrivent CETTE capture : sans eux, une
+                // saisie clavier faite hors ligne remontait en « GPS », et le
+                // serveur lui appliquait la tolérance de zone des 500 m au lieu
+                // des 100 m (§ F07). Le contrôle qu'on croyait strict ne l'était
+                // que pour les saisies faites en ligne.
+                ApiClient.putPosition(token, code, p.lat, p.lon, p.accuracyM,
+                    p.manual, p.method)
                 PmRepository.marqueAcquittee(context, code)
                 uploaded++
             } catch (e: ApiClient.ApiException) {

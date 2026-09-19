@@ -30,7 +30,10 @@ object ApiClient {
     )
     data class ServerPmPosition(
         val code: String, val lat: Double, val lon: Double,
-        val author: String?, val updatedAt: String?
+        val author: String?, val updatedAt: String?,
+        // Le serveur descend la précision et le mode de saisie ; on les ignorait,
+        // et une position redescendue perdait donc ce qui dit ce qu'elle vaut.
+        val accuracyM: Double? = null, val method: String? = null
     )
     /** Une synchro menée à son terme : `nextSince` n'est à mémoriser qu'après
      *  application locale, sinon un échec en cours de route ferait sauter un
@@ -132,7 +135,9 @@ object ApiClient {
                 if (x.isNull("lat") || x.isNull("lon")) continue
                 positions.add(ServerPmPosition(
                     x.getString("code"), x.getDouble("lat"), x.getDouble("lon"),
-                    optStr(x, "author"), optStr(x, "updated_at")
+                    optStr(x, "author"), optStr(x, "updated_at"),
+                    if (x.isNull("accuracy_m")) null else x.optDouble("accuracy_m"),
+                    optStr(x, "method")
                 ))
             }
             val sup = o.getJSONArray("deleted")

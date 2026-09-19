@@ -876,12 +876,14 @@ fun PmDetailScreen(pm: Pm, onBack: () -> Unit) {
         val token = SessionStore.token
         scope.launch {
             if (token == null) {
-                PmRepository.saveExact(context, code, lat, lon, note, accuracyM = accuracy)
+                PmRepository.saveExact(context, code, lat, lon, note, accuracyM = accuracy,
+                    manual = manual, method = methode)
                 refresh(); return@launch
             }
             try {
                 ApiClient.putPosition(token, code, lat, lon, accuracy, manual, methode)
-                PmRepository.saveExact(context, code, lat, lon, note, SessionStore.username, accuracy, synced = true)
+                PmRepository.saveExact(context, code, lat, lon, note, SessionStore.username, accuracy,
+                    synced = true, manual = manual, method = methode)
                 refresh()
                 Toast.makeText(context, "Géoloc précise enregistrée ✅", Toast.LENGTH_SHORT).show()
             } catch (e: ApiClient.ApiException) {
@@ -889,7 +891,11 @@ fun PmDetailScreen(pm: Pm, onBack: () -> Unit) {
                 Toast.makeText(context, e.message ?: "Refusé par le serveur", Toast.LENGTH_LONG).show()
             } catch (e: Exception) {
                 // Hors-ligne : conserver en local (sera partagé à la prochaine capture en ligne).
-                PmRepository.saveExact(context, code, lat, lon, note, SessionStore.username, accuracy)
+                // Hors ligne, la capture attend dans le fichier local : elle doit
+                // y emporter son mode de saisie, c'est la synchro qui la remontera
+                // plus tard et elle n'aura plus rien d'autre pour le savoir (§ F07).
+                PmRepository.saveExact(context, code, lat, lon, note, SessionStore.username, accuracy,
+                    manual = manual, method = methode)
                 refresh()
                 Toast.makeText(context, "Enregistré en local (hors-ligne)", Toast.LENGTH_LONG).show()
             }

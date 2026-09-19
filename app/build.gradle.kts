@@ -61,6 +61,10 @@ dependencies {
     implementation("androidx.compose.material3:material3")
 
     testImplementation("junit:junit:4.13.2")
+    // Android fournit org.json a l'execution, mais le stub des tests JVM rend
+    // des valeurs par defaut en silence : sans cette implementation reelle, un
+    // test du format de fichier passerait sans rien verifier.
+    testImplementation("org.json:json:20240303")
 
     implementation("com.google.android.gms:play-services-location:21.3.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
