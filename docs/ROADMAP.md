@@ -1,7 +1,11 @@
 # PM Fibre — Feuille de route
 
 > Compte rendu de la séance de conception du 18-19 septembre 2026.
-> **Aucun code n'a été écrit** : ce document fige les décisions avant de coder.
+> Il fige les décisions ; les sections 2 à 4 les décrivent telles qu'elles ont
+> été arrêtées et n'ont pas été réécrites depuis.
+> **État du code au 19 septembre 2026 : les six points bloquants de la
+> section 5 sont faits** — chacun porte sa note de réalisation, y compris les
+> écarts assumés. Rien n'est encore déployé ni publié.
 > À lire en premier par toute nouvelle session de travail.
 
 ---
