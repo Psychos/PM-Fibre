@@ -374,6 +374,30 @@ object PmRepository {
 
     // ---- Recherche / proximité (utilisent la position effective) ----
 
+    /**
+     * PM contenus dans un rectangle géographique (roadmap 4.8). La carte affichait
+     * jusqu'ici les 120 plus proches du fix GPS, calculés une seule fois : faire
+     * glisser la carte vers une autre commune ne rendait rien, alors que les fiches
+     * étaient là. C'est un défaut d'affichage, pas un manque de données.
+     *
+     * Un simple balayage suffit : sur six départements (~6000 fiches) il dure une
+     * fraction de milliseconde, et aucun index géographique n'est à maintenir à
+     * chaque (dé)chargement de paquet. Le plafond borne le cas du dézoom, où le
+     * rectangle couvrirait tout le périmètre installé.
+     */
+    fun inBoundingBox(sud: Double, nord: Double, ouest: Double, est: Double,
+                      limit: Int = 3000): List<PmView> {
+        val out = ArrayList<PmView>()
+        for (pm in pms) {
+            val v = view(pm)
+            if (v.lat in sud..nord && v.lon in ouest..est) {
+                out.add(v)
+                if (out.size >= limit) break
+            }
+        }
+        return out
+    }
+
     fun nearest(lat: Double, lon: Double, limit: Int = 25): List<PmDistance> {
         return pms.asSequence()
             .map { view(it) }

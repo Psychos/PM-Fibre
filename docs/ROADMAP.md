@@ -570,10 +570,30 @@ composé, sa liste et son défilement sont intacts. Idem pour `AddPmScreen`,
 
 ### Ensuite, sans urgence
 
-7. Confort : `BackHandler` + fiche en surimpression *(§ 4.9)* — une demi-heure,
-   indépendant de tout le reste
+7. Confort : `BackHandler` + fiche en surimpression *(§ 4.9)* — *fait*
+
+   Les sous-écrans s'affichent désormais **par-dessus** l'onglet, dans un `Box`,
+   derrière une `Surface` opaque. Le `return` anticipé d'avant sortait l'onglet de
+   la composition et emportait tout son état `remember` : ouvrir une fiche depuis
+   « Autour » puis revenir rendait une liste vide et un fix GPS à refaire.
+   `BackHandler` ferme le sous-écran, sinon ramène à l'onglet Recherche, sinon
+   demande une seconde pression pour quitter. L'écran d'aide, qui décrivait encore
+   une application à données embarquées, a été remis à jour dans la foulée.
+
 8. Carte : points ronds, `SimpleFastPointOverlay`, affichage par zone visible,
-   seuil de zoom, fond ortho IGN, cercle d'incertitude *(§ 3.9, § 4.8)*
+   seuil de zoom, fond ortho IGN, cercle d'incertitude *(§ 3.9, § 4.8)* — *fait*
+
+   `PmRepository.inBoundingBox()` remplace le `nearest()` unique : la carte rend ce
+   qu'on regarde, et non le voisinage du fix GPS — l'affaire de Louviers est close.
+   Un `DelayedMapListener` (300 ms) absorbe la rafale d'événements d'un glissement,
+   un `OnFirstLayoutListener` remplit la carte même sans fix GPS. Les PM à moins de
+   ~11 m les uns des autres sont regroupés (shelters) : un appui ouvre la fiche
+   quand ils sont seuls, la liste des occupants sinon.
+
+   Écart assumé à la décision : `MEDIUM_OPTIMIZATION` et non `MAXIMUM_OPTIMIZATION`.
+   Ce dernier met sa grille en cache par niveau de zoom ; comme la liste est rebâtie
+   à chaque déplacement, le cache ne servirait à rien et afficherait un glissement
+   de retard.
 9. Terrain : photos, indication d'accès en tête de fiche avec cache hors ligne,
    étiquettes, deux modes de capture GPS *(§ 3.5, § 3.6, § 3.7)*
 10. Interface : trois onglets, `? ⚙`, aide contextuelle, centralisation des
@@ -587,11 +607,14 @@ pendant que la base est encore jetable.
 
 ## 6. Questions encore ouvertes
 
-- Retour arrière depuis un onglet secondaire : ramener à l'onglet principal
-  (convention Android) ou quitter directement ? Prévoir « appuyez à nouveau pour
-  quitter » sur l'onglet racine.
-- Couleur des PM sur la carte une fois les pins remplacés, sans entrer en conflit
-  avec le point bleu « ma position ».
+- ~~Retour arrière depuis un onglet secondaire~~ — **tranchée (point 7)** : retour
+  à l'onglet Recherche, puis double pression pour quitter. Sur le terrain une
+  pression de trop coûte un fix GPS et une saisie en cours.
+- ~~Couleur des PM sur la carte~~ — **tranchée (point 8)** : vert pour une position
+  relevée sur place, rouge pour un centre de zone ARCEP, et **la forme distingue
+  autant que la couleur** (rond / carré) — environ 8 % des hommes confondent le
+  vert et le rouge, et c'est justement la population du terrain. Le point bleu de
+  « ma position » garde son halo blanc et passe au-dessus des PM.
 - Migration SQLite/Room : à trancher seulement si le démarrage devient lent.
 - `MainActivity.kt` fait 1 472 lignes. Si la refonte Paramètres ajoute 6 ou 7
   sous-écrans, Navigation Compose se justifiera ; les booléens + `BackHandler`
