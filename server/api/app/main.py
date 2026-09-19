@@ -487,10 +487,17 @@ def sync_positions(
 ):
     """Positions modifiées depuis `since`, et suppressions survenues depuis.
 
-    Sans `since` : inventaire complet du périmètre, suppressions omises (le
-    client n'a rien à retirer qu'il ne saurait déduire de l'inventaire).
     Avec `since` : différentiel, et c'est `deleted` — alimenté par la table des
     pierres tombales — qui porte les suppressions.
+
+    Sans `since` : inventaire complet du périmètre, **pierres tombales
+    comprises**. Elles l'étaient, au motif que le client déduirait les
+    suppressions de l'absence dans l'inventaire (§ F06). Il ne le peut que si
+    l'inventaire est national : sur un périmètre départemental, un code absent
+    est presque toujours un code d'un autre département. Un téléphone qui
+    repart de zéro — base locale reconstruite, fichier de secours relu,
+    département installé — ne voyait donc plus jamais les suppressions faites
+    avant lui, et gardait indéfiniment des positions retirées par un admin.
     """
     deps = _departements_demandes(dep)
 
@@ -510,10 +517,8 @@ def sync_positions(
     q_pos = base_pos if since is None else base_pos.where(PmPosition.updated_at > since)
     positions = list(db.scalars(q_pos.order_by(PmPosition.updated_at.asc()).limit(limit)))
 
-    tombes = []
-    if since is not None:
-        tombes = list(db.scalars(base_del.where(Tombstone.deleted_at > since)
-                                 .order_by(Tombstone.deleted_at.asc()).limit(limit)))
+    q_del = base_del if since is None else base_del.where(Tombstone.deleted_at > since)
+    tombes = list(db.scalars(q_del.order_by(Tombstone.deleted_at.asc()).limit(limit)))
 
     bornes = []
     if len(positions) == limit:
@@ -531,8 +536,7 @@ def sync_positions(
         positions = ([p for p in positions if p.updated_at < curseur]
                      + list(db.scalars(base_pos.where(PmPosition.updated_at == curseur))))
         tombes = ([t for t in tombes if t.deleted_at < curseur]
-                  + (list(db.scalars(base_del.where(Tombstone.deleted_at == curseur)))
-                     if since is not None else []))
+                  + list(db.scalars(base_del.where(Tombstone.deleted_at == curseur))))
     else:
         # Horloge de la base, celle des `updated_at` — pas celle de l'API, qui
         # peut dériver. Une seconde de marge : une écriture concurrente portant
@@ -702,6 +706,9 @@ def sync_meta(
     plus petit des horodatages non entièrement livrés, de sorte que la garantie
     reste celle de `/sync/positions` — tout ce qui porte un horodatage
     <= `next_since` a été servi.
+
+    Sans `since`, les pierres tombales sont livrées elles aussi, pour la raison
+    dite sur `/sync/positions` (§ F06).
     """
     deps = _departements_demandes(dep)
 
@@ -722,10 +729,8 @@ def sync_meta(
     tags = list(db.scalars(q_tags.order_by(PmTag.created_at.asc()).limit(limit)))
     acces = list(db.scalars(q_acc.order_by(PmAccess.updated_at.asc()).limit(limit)))
 
-    tombes = []
-    if since is not None:
-        tombes = list(db.scalars(base_del.where(Tombstone.deleted_at > since)
-                                 .order_by(Tombstone.deleted_at.asc()).limit(limit)))
+    q_del = base_del if since is None else base_del.where(Tombstone.deleted_at > since)
+    tombes = list(db.scalars(q_del.order_by(Tombstone.deleted_at.asc()).limit(limit)))
 
     bornes = []
     if len(tags) == limit:
@@ -746,8 +751,7 @@ def sync_meta(
         acces = ([a for a in acces if a.updated_at < curseur]
                  + list(db.scalars(base_acc.where(PmAccess.updated_at == curseur))))
         tombes = ([t for t in tombes if t.deleted_at < curseur]
-                  + (list(db.scalars(base_del.where(Tombstone.deleted_at == curseur)))
-                     if since is not None else []))
+                  + list(db.scalars(base_del.where(Tombstone.deleted_at == curseur))))
     else:
         curseur = db.scalar(select(func.now())) - timedelta(seconds=1)
         complete = True
