@@ -8,20 +8,32 @@ import kotlinx.coroutines.withContext
 object Sync {
     private const val PREFS = "pmfibre_sync"
     private const val K_SINCE = "positions_since"
+    private const val K_PERIMETRE = "positions_deps"
 
-    /** Curseur de la dernière synchro aboutie. null = jamais synchronisé. */
-    private fun curseur(context: Context): String? =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(K_SINCE, null)
-
-    private fun memoriseCurseur(context: Context, valeur: String) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit().putString(K_SINCE, valeur).apply()
+    /**
+     * Curseur de la dernière synchro aboutie, **pour ce périmètre**. null =
+     * inventaire complet au prochain appel.
+     *
+     * Le périmètre est mémorisé avec le curseur parce qu'un curseur ne vaut que
+     * pour lui : après l'installation d'un département, un différentiel « depuis
+     * hier » ne rendrait rien du nouveau département, dont les positions sont
+     * toutes antérieures. On repart donc de zéro dès que la liste change.
+     */
+    private fun curseur(context: Context, perimetre: String): String? {
+        val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        if (p.getString(K_PERIMETRE, "") != perimetre) return null
+        return p.getString(K_SINCE, null)
     }
 
-    /** Repart d'un inventaire complet au prochain appel (changement de périmètre,
-     *  base locale reconstruite…). */
+    private fun memoriseCurseur(context: Context, perimetre: String, valeur: String) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putString(K_PERIMETRE, perimetre).putString(K_SINCE, valeur).apply()
+    }
+
+    /** Repart d'un inventaire complet au prochain appel (base locale reconstruite…). */
     fun reinitialise(context: Context) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove(K_SINCE).apply()
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .remove(K_SINCE).remove(K_PERIMETRE).apply()
     }
 
     /**
@@ -50,9 +62,13 @@ object Sync {
             withContext(Dispatchers.IO) { PmRepository.mergeAddedPms(context, added) }
         } catch (_: Exception) {}
 
-        val res = ApiClient.syncPositions(token, curseur(context))
+        // Périmètre = départements installés. Vide (aucun paquet) -> le serveur
+        // ne filtre pas : la synchro reste nationale tant qu'on ne lui demande rien.
+        val deps = PmRepository.departements
+        val perimetre = deps.joinToString(",")
+        val res = ApiClient.syncPositions(token, curseur(context, perimetre), deps)
         val merged = withContext(Dispatchers.IO) { PmRepository.mergeServerPositions(context, res) }
-        memoriseCurseur(context, res.nextSince)
+        memoriseCurseur(context, perimetre, res.nextSince)
 
         val suppr = if (res.deleted.isNotEmpty()) " · ${res.deleted.size} retirée(s)" else ""
         val envoi = if (uploaded > 0) " · $uploaded envoyée(s)" else ""

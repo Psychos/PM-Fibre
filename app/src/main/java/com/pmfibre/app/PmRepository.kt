@@ -50,6 +50,7 @@ object PmRepository {
     // Polygones ZAPM (zone de desserte ARCEP) par code PM : code -> anneaux -> [lat, lon]
     @Volatile private var zoneRings: Map<String, List<List<DoubleArray>>> = emptyMap()
     @Volatile private var zoneBBox: Map<String, DoubleArray> = emptyMap()  // code -> [minLat, maxLat, minLon, maxLon]
+    @Volatile private var depCodes: List<String> = emptyList()  // départements installés
     private val saved = HashMap<String, SavedPos>()   // code PM -> position enregistrée
 
     /** Normalise pour la recherche : sans accents, majuscules, alphanumérique seul. */
@@ -71,18 +72,48 @@ object PmRepository {
 
     fun isLoaded(): Boolean = pms.isNotEmpty()
 
+    /** Périmètre installé, tel que le voit la synchro (`/sync/positions?dep=…`). */
+    val departements: List<String> get() = depCodes
+
+    /**
+     * Charge les départements installés dans `filesDir/deps/` (roadmap 3.2).
+     *
+     * L'app démarre vide : aucun département installé = aucun PM, et c'est un
+     * état normal, pas une erreur. Seul `oi_map.json` (3 Ko) reste dans l'APK.
+     *
+     * Un paquet illisible est ignoré plutôt que fatal : la donnée manque, mais
+     * l'app ouvre — et l'écran Départements permet de le réinstaller.
+     */
     fun load(context: Context) {
         val mapText = context.assets.open("oi_map.json").bufferedReader().use { it.readText() }
         oiNames = parseOiMap(mapText)
-        val text = context.assets.open("pm_full.json").bufferedReader().use { it.readText() }
-        basePms = parse(text)
+        DepStore.nettoie(context)
+
+        val fiches = ArrayList<Pm>()
+        val anneaux = HashMap<String, List<List<DoubleArray>>>()
+        val codes = DepStore.installes(context)
+        for (dep in codes) {
+            val dossier = DepStore.dossier(context, dep)
+            try {
+                fiches.addAll(parse(File(dossier, "pm.json").readText(), dep))
+            } catch (e: Exception) { continue }
+            try {
+                anneaux.putAll(parseZones(File(dossier, "zones.json").readText()))
+            } catch (e: Exception) { /* zones absentes : le PM reste utilisable sans polygone */ }
+        }
+        basePms = fiches
+        depCodes = codes
+        zoneRings = anneaux
+        zoneBBox = zoneRings.mapValues { (_, rings) -> boundingBox(rings) }
+
         addedPms = loadAddedPms(context)
         cpMap = loadCpMap(context)
-        zoneRings = loadZones(context)
-        zoneBBox = zoneRings.mapValues { (_, rings) -> boundingBox(rings) }
         rebuild()
         loadSaved(context)
     }
+
+    /** Relit les paquets après installation ou déchargement d'un département. */
+    fun reload(context: Context) = load(context)
 
     private fun rebuild() {
         val map = LinkedHashMap<String, Pm>(basePms.size + addedPms.size)
@@ -139,6 +170,7 @@ object PmRepository {
             if (p.tot != null) put("tot", p.tot)
             if (p.oi != null) put("oi", p.oi)
             if (p.op != null) put("op", p.op)
+            if (p.depCode != null) put("dep_code", p.depCode)
             put("user", 1)
         })
         File(context.filesDir, "added_pms.json").writeText(arr.toString())
@@ -312,7 +344,8 @@ object PmRepository {
         return map
     }
 
-    private fun parse(text: String): List<Pm> {
+    /** `depCode` vient du dossier du paquet : pm.json ne le porte pas. */
+    private fun parse(text: String, depCode: String? = null): List<Pm> {
         val arr = JSONArray(text)
         val list = ArrayList<Pm>(arr.length())
         for (i in 0 until arr.length()) {
@@ -331,7 +364,8 @@ object PmRepository {
                     lon = o.getDouble("lon"),
                     precise = o.optInt("p", 0) == 1,
                     op = o.optString("op", "").ifEmpty { null },
-                    userAdded = o.optInt("user", 0) == 1
+                    userAdded = o.optInt("user", 0) == 1,
+                    depCode = depCode ?: o.optString("dep_code", "").ifEmpty { null }
                 )
             )
         }
@@ -351,8 +385,7 @@ object PmRepository {
 
     // ---- Zone ARCEP (quel PM dessert ce point) ----
 
-    private fun loadZones(context: Context): Map<String, List<List<DoubleArray>>> = try {
-        val text = context.assets.open("zones_normandie.json").bufferedReader().use { it.readText() }
+    private fun parseZones(text: String): Map<String, List<List<DoubleArray>>> = try {
         val o = JSONObject(text)
         buildMap {
             for (code in o.keys()) {

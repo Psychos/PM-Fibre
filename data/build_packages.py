@@ -11,6 +11,8 @@ poste) :
 Sortie : site/public/data/
   - deps/<code>.tgz  : pm.json + zones.json du departement
   - manifest.json    : dataset, generated, max_deps, min_app_version, deps[]
+                       (chaque entree porte son code, son nom, sa region, son
+                       poids et son sha256)
 
 Deux regles de format, imposees par l'app (roadmap 5.1) :
 
@@ -44,6 +46,40 @@ DEPS_DIR = os.path.join(OUT_DIR, "deps")
 DATASET = "ZAPM 2026T2"
 MAX_DEPS = 6        # roadmap 3.1 — relevable sans republier l'APK
 MIN_APP_VERSION = 6  # versionCode minimal sachant lire ces paquets (actuel : 5)
+
+# Regroupement regional, pour l'ecran des departements (roadmap 3.1) : une liste
+# de 103 cases a cocher sans structure est illisible. Le regroupement vit dans le
+# manifeste et non dans l'APK, comme le plafond `max_deps` : un decoupage qui
+# bouge (fusion de regions, nouveau territoire) se corrige en regenerant les
+# donnees, sans republier l'application.
+# Noms sans accents, comme les noms de departements que l'ARCEP livre en
+# majuscules non accentuees : melanger « Ile-de-France » et « Cotes-d'Armor »
+# accentue l'un des deux au hasard. A reprendre en bloc le jour ou l'on
+# reaccentue le jeu complet.
+REGIONS = {
+    "Auvergne-Rhone-Alpes": "01 03 07 15 26 38 42 43 63 69 73 74",
+    "Bourgogne-Franche-Comte": "21 25 39 58 70 71 89 90",
+    "Bretagne": "22 29 35 56",
+    "Centre-Val de Loire": "18 28 36 37 41 45",
+    "Corse": "2A 2B",
+    "Grand Est": "08 10 51 52 54 55 57 67 68 88",
+    "Hauts-de-France": "02 59 60 62 80",
+    "Ile-de-France": "75 77 78 91 92 93 94 95",
+    "Normandie": "14 27 50 61 76",
+    "Nouvelle-Aquitaine": "16 17 19 23 24 33 40 47 64 79 86 87",
+    "Occitanie": "09 11 12 30 31 32 34 46 48 65 66 81 82",
+    "Pays de la Loire": "44 49 53 72 85",
+    "Provence-Alpes-Cote d'Azur": "04 05 06 13 83 84",
+    # DROM et collectivites reunis : sept entrees d'une case chacune feraient
+    # sept titres pour sept departements. 977 et 978 (Saint-Barthelemy,
+    # Saint-Martin) manquent des tables a 101 departements ; ils sont dans ZAPM.
+    "Outre-mer": "971 972 973 974 976 977 978",
+}
+
+REGION_PAR_DEP = {code: region
+                  for region, codes in REGIONS.items()
+                  for code in codes.split()}
+
 
 # Particules qui restent en minuscules dans un nom de departement.
 _PARTICULES = {"de", "du", "des", "la", "le", "les", "d", "l", "et", "sur"}
@@ -199,7 +235,8 @@ def main() -> None:
         })
         taille = os.path.getsize(chemin)
         entrees.append({
-            "code": dep, "nom": nom, "pm": len(fiches),
+            "code": dep, "nom": nom, "region": REGION_PAR_DEP.get(dep, "Autres"),
+            "pm": len(fiches),
             "exact": sum(1 for x in fiches if x.get("p") == 1),
             "zones": len(zones_par_dep[dep]),
             "size": taille, "sha256": sha256(chemin), "url": f"deps/{dep}.tgz",

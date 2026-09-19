@@ -1,12 +1,13 @@
 {
   "dataset": "ZAPM 2026T2",
-  "generated": "2026-09-19T08:20:53Z",
+  "generated": "2026-09-19T09:03:03Z",
   "max_deps": 6,
   "min_app_version": 6,
   "deps": [
     {
       "code": "01",
       "nom": "Ain",
+      "region": "Auvergne-Rhone-Alpes",
       "pm": 1162,
       "exact": 24,
       "zones": 1162,
@@ -17,6 +18,7 @@
     {
       "code": "02",
       "nom": "Aisne",
+      "region": "Hauts-de-France",
       "pm": 754,
       "exact": 0,
       "zones": 754,
@@ -27,6 +29,7 @@
     {
       "code": "03",
       "nom": "Allier",
+      "region": "Auvergne-Rhone-Alpes",
       "pm": 651,
       "exact": 62,
       "zones": 651,
@@ -37,6 +40,7 @@
     {
       "code": "04",
       "nom": "Alpes-de-Haute-Provence",
+      "region": "Provence-Alpes-Cote d'Azur",
       "pm": 397,
       "exact": 15,
       "zones": 397,
@@ -47,6 +51,7 @@
     {
       "code": "05",
       "nom": "Hautes-Alpes",
+      "region": "Provence-Alpes-Cote d'Azur",
       "pm": 419,
       "exact": 14,
       "zones": 419,
@@ -57,6 +62,7 @@
     {
       "code": "06",
       "nom": "Alpes-Maritimes",
+      "region": "Provence-Alpes-Cote d'Azur",
       "pm": 1717,
       "exact": 23,
       "zones": 1717,
@@ -67,6 +73,7 @@
     {
       "code": "07",
       "nom": "Ardeche",
+      "region": "Auvergne-Rhone-Alpes",
       "pm": 636,
       "exact": 8,
       "zones": 636,
@@ -77,6 +84,7 @@
     {
       "code": "08",
       "nom": "Ardennes",
+      "region": "Grand Est",
       "pm": 388,
       "exact": 10,
       "zones": 388,
@@ -87,6 +95,7 @@
     {
       "code": "09",
       "nom": "Ariege",
+      "region": "Occitanie",
       "pm": 345,
       "exact": 26,
       "zones": 345,
@@ -97,6 +106,7 @@
     {
       "code": "10",
       "nom": "Aube",
+      "region": "Grand Est",
       "pm": 466,
       "exact": 85,
       "zones": 466,
@@ -107,6 +117,7 @@
     {
       "code": "11",
       "nom": "Aude",
+      "region": "Occitanie",
       "pm": 773,
       "exact": 14,
       "zones": 773,
@@ -117,6 +128,7 @@
     {
       "code": "12",
       "nom": "Aveyron",
+      "region": "Occitanie",
       "pm": 822,
       "exact": 56,
       "zones": 822,
@@ -127,6 +139,7 @@
     {
       "code": "13",
       "nom": "Bouches-du-Rhone",
+      "region": "Provence-Alpes-Cote d'Azur",
       "pm": 2396,
       "exact": 70,
       "zones": 2396,
@@ -137,6 +150,7 @@
     {
       "code": "14",
       "nom": "Calvados",
+      "region": "Normandie",
       "pm": 1081,
       "exact": 20,
       "zones": 1081,
@@ -147,6 +161,7 @@
     {
       "code": "15",
       "nom": "Cantal",
+      "region": "Auvergne-Rhone-Alpes",
       "pm": 329,
       "exact": 7,
       "zones": 329,
@@ -157,6 +172,7 @@
     {
       "code": "16",
       "nom": "Charente",
+      "region": "Nouvelle-Aquitaine",
       "pm": 612,
       "exact": 4,
       "zones": 612,
@@ -167,6 +183,7 @@
     {
       "code": "17",
       "nom": "Charente-Maritime",
+      "region": "Nouvelle-Aquitaine",
       "pm": 1388,
       "exact": 150,
       "zones": 1388,
@@ -177,6 +194,7 @@
     {
       "code": "18",
       "nom": "Cher",
+      "region": "Centre-Val de Loire",
       "pm": 490,
       "exact": 287,
       "zones": 490,
@@ -187,6 +205,7 @@
     {
       "code": "19",
       "nom": "Correze",
+      "region": "Nouvelle-Aquitaine",
       "pm": 461,
       "exact": 67,
       "zones": 461,
@@ -197,6 +216,7 @@
     {
       "code": "21",
       "nom": "Cote-d'Or",
+      "region": "Bourgogne-Franche-Comte",
       "pm": 933,
       "exact": 65,
       "zones": 933,
@@ -207,6 +227,7 @@
     {
       "code": "22",
       "nom": "Cotes-d'Armor",
+      "region": "Bretagne",
       "pm": 1171,
       "exact": 215,
       "zones": 1171,
@@ -217,6 +238,7 @@
     {
       "code": "23",
       "nom": "Creuse",
+      "region": "Nouvelle-Aquitaine",
       "pm": 263,
       "exact": 0,
       "zones": 263,
@@ -227,6 +249,7 @@
     {
       "code": "24",
       "nom": "Dordogne",
+      "region": "Nouvelle-Aquitaine",
       "pm": 756,
       "exact": 680,
       "zones": 756,
@@ -237,6 +260,7 @@
     {
       "code": "25",
       "nom": "Doubs",
+      "region": "Bourgogne-Franche-Comte",
       "pm": 781,
       "exact": 507,
       "zones": 781,
@@ -247,6 +271,7 @@
     {
       "code": "26",
       "nom": "Drome",
+      "region": "Auvergne-Rhone-Alpes",
       "pm": 904,
       "exact": 32,
       "zones": 904,
@@ -257,6 +282,7 @@
     {
       "code": "27",
       "nom": "Eure",
+      "region": "Normandie",
       "pm": 758,
       "exact": 20,
       "zones": 758,
@@ -267,6 +293,7 @@
     {
       "code": "28",
       "nom": "Eure-et-Loir",
+      "region": "Centre-Val de Loire",
       "pm": 710,
       "exact": 49,
       "zones": 710,
@@ -277,6 +304,7 @@
     {
       "code": "29",
       "nom": "Finistere",
+      "region": "Bretagne",
       "pm": 1702,
       "exact": 734,
       "zones": 1702,
@@ -287,6 +315,7 @@
     {
       "code": "2A",
       "nom": "Corse-du-Sud",
+      "region": "Corse",
       "pm": 416,
       "exact": 39,
       "zones": 416,
@@ -297,6 +326,7 @@
     {
       "code": "2B",
       "nom": "Haute-Corse",
+      "region": "Corse",
       "pm": 446,
       "exact": 75,
       "zones": 446,
@@ -307,6 +337,7 @@
     {
       "code": "30",
       "nom": "Gard",
+      "region": "Occitanie",
       "pm": 1453,
       "exact": 11,
       "zones": 1453,
@@ -317,6 +348,7 @@
     {
       "code": "31",
       "nom": "Haute-Garonne",
+      "region": "Occitanie",
       "pm": 1509,
       "exact": 55,
       "zones": 1509,
@@ -327,6 +359,7 @@
     {
       "code": "32",
       "nom": "Gers",
+      "region": "Occitanie",
       "pm": 437,
       "exact": 1,
       "zones": 437,
@@ -337,6 +370,7 @@
     {
       "code": "33",
       "nom": "Gironde",
+      "region": "Nouvelle-Aquitaine",
       "pm": 2717,
       "exact": 441,
       "zones": 2717,
@@ -347,6 +381,7 @@
     {
       "code": "34",
       "nom": "Herault",
+      "region": "Occitanie",
       "pm": 1611,
       "exact": 18,
       "zones": 1611,
@@ -357,6 +392,7 @@
     {
       "code": "35",
       "nom": "Ille-et-Vilaine",
+      "region": "Bretagne",
       "pm": 1648,
       "exact": 344,
       "zones": 1648,
@@ -367,6 +403,7 @@
     {
       "code": "36",
       "nom": "Indre",
+      "region": "Centre-Val de Loire",
       "pm": 393,
       "exact": 189,
       "zones": 393,
@@ -377,6 +414,7 @@
     {
       "code": "37",
       "nom": "Indre-et-Loire",
+      "region": "Centre-Val de Loire",
       "pm": 1053,
       "exact": 383,
       "zones": 1053,
@@ -387,6 +425,7 @@
     {
       "code": "38",
       "nom": "Isere",
+      "region": "Auvergne-Rhone-Alpes",
       "pm": 1427,
       "exact": 55,
       "zones": 1427,
@@ -397,6 +436,7 @@
     {
       "code": "39",
       "nom": "Jura",
+      "region": "Bourgogne-Franche-Comte",
       "pm": 449,
       "exact": 82,
       "zones": 449,
@@ -407,6 +447,7 @@
     {
       "code": "40",
       "nom": "Landes",
+      "region": "Nouvelle-Aquitaine",
       "pm": 729,
       "exact": 324,
       "zones": 729,
@@ -417,6 +458,7 @@
     {
       "code": "41",
       "nom": "Loir-et-Cher",
+      "region": "Centre-Val de Loire",
       "pm": 597,
       "exact": 296,
       "zones": 597,
@@ -427,6 +469,7 @@
     {
       "code": "42",
       "nom": "Loire",
+      "region": "Auvergne-Rhone-Alpes",
       "pm": 971,
       "exact": 2,
       "zones": 971,
@@ -437,6 +480,7 @@
     {
       "code": "43",
       "nom": "Haute-Loire",
+      "region": "Auvergne-Rhone-Alpes",
       "pm": 444,
       "exact": 56,
       "zones": 444,
@@ -447,6 +491,7 @@
     {
       "code": "44",
       "nom": "Loire-Atlantique",
+      "region": "Pays de la Loire",
       "pm": 1952,
       "exact": 722,
       "zones": 1952,
@@ -457,6 +502,7 @@
     {
       "code": "45",
       "nom": "Loiret",
+      "region": "Centre-Val de Loire",
       "pm": 897,
       "exact": 435,
       "zones": 897,
@@ -467,6 +513,7 @@
     {
       "code": "46",
       "nom": "Lot",
+      "region": "Occitanie",
       "pm": 498,
       "exact": 59,
       "zones": 498,
@@ -477,6 +524,7 @@
     {
       "code": "47",
       "nom": "Lot-et-Garonne",
+      "region": "Nouvelle-Aquitaine",
       "pm": 695,
       "exact": 6,
       "zones": 695,
@@ -487,6 +535,7 @@
     {
       "code": "48",
       "nom": "Lozere",
+      "region": "Occitanie",
       "pm": 272,
       "exact": 0,
       "zones": 272,
@@ -497,6 +546,7 @@
     {
       "code": "49",
       "nom": "Maine-et-Loire",
+      "region": "Pays de la Loire",
       "pm": 1468,
       "exact": 22,
       "zones": 1468,
@@ -507,6 +557,7 @@
     {
       "code": "50",
       "nom": "Manche",
+      "region": "Normandie",
       "pm": 616,
       "exact": 188,
       "zones": 616,
@@ -517,6 +568,7 @@
     {
       "code": "51",
       "nom": "Marne",
+      "region": "Grand Est",
       "pm": 885,
       "exact": 12,
       "zones": 885,
@@ -527,6 +579,7 @@
     {
       "code": "52",
       "nom": "Haute-Marne",
+      "region": "Grand Est",
       "pm": 284,
       "exact": 3,
       "zones": 284,
@@ -537,6 +590,7 @@
     {
       "code": "53",
       "nom": "Mayenne",
+      "region": "Pays de la Loire",
       "pm": 509,
       "exact": 6,
       "zones": 509,
@@ -547,6 +601,7 @@
     {
       "code": "54",
       "nom": "Meurthe-et-Moselle",
+      "region": "Grand Est",
       "pm": 860,
       "exact": 7,
       "zones": 860,
@@ -557,6 +612,7 @@
     {
       "code": "55",
       "nom": "Meuse",
+      "region": "Grand Est",
       "pm": 257,
       "exact": 5,
       "zones": 257,
@@ -567,6 +623,7 @@
     {
       "code": "56",
       "nom": "Morbihan",
+      "region": "Bretagne",
       "pm": 1482,
       "exact": 402,
       "zones": 1482,
@@ -577,6 +634,7 @@
     {
       "code": "57",
       "nom": "Moselle",
+      "region": "Grand Est",
       "pm": 1274,
       "exact": 4,
       "zones": 1274,
@@ -587,6 +645,7 @@
     {
       "code": "58",
       "nom": "Nievre",
+      "region": "Bourgogne-Franche-Comte",
       "pm": 401,
       "exact": 73,
       "zones": 401,
@@ -597,6 +656,7 @@
     {
       "code": "59",
       "nom": "Nord",
+      "region": "Hauts-de-France",
       "pm": 3544,
       "exact": 52,
       "zones": 3544,
@@ -607,6 +667,7 @@
     {
       "code": "60",
       "nom": "Oise",
+      "region": "Hauts-de-France",
       "pm": 984,
       "exact": 1,
       "zones": 984,
@@ -617,6 +678,7 @@
     {
       "code": "61",
       "nom": "Orne",
+      "region": "Normandie",
       "pm": 604,
       "exact": 0,
       "zones": 604,
@@ -627,6 +689,7 @@
     {
       "code": "62",
       "nom": "Pas-de-Calais",
+      "region": "Hauts-de-France",
       "pm": 2224,
       "exact": 17,
       "zones": 2224,
@@ -637,6 +700,7 @@
     {
       "code": "63",
       "nom": "Puy-de-Dome",
+      "region": "Auvergne-Rhone-Alpes",
       "pm": 1211,
       "exact": 98,
       "zones": 1211,
@@ -647,6 +711,7 @@
     {
       "code": "64",
       "nom": "Pyrenees-Atlantiques",
+      "region": "Nouvelle-Aquitaine",
       "pm": 1304,
       "exact": 6,
       "zones": 1304,
@@ -657,6 +722,7 @@
     {
       "code": "65",
       "nom": "Hautes-Pyrenees",
+      "region": "Occitanie",
       "pm": 552,
       "exact": 19,
       "zones": 552,
@@ -667,6 +733,7 @@
     {
       "code": "66",
       "nom": "Pyrenees-Orientales",
+      "region": "Occitanie",
       "pm": 1000,
       "exact": 32,
       "zones": 1000,
@@ -677,6 +744,7 @@
     {
       "code": "67",
       "nom": "Bas-Rhin",
+      "region": "Grand Est",
       "pm": 1252,
       "exact": 10,
       "zones": 1252,
@@ -687,6 +755,7 @@
     {
       "code": "68",
       "nom": "Haut-Rhin",
+      "region": "Grand Est",
       "pm": 946,
       "exact": 6,
       "zones": 946,
@@ -697,6 +766,7 @@
     {
       "code": "69",
       "nom": "Rhone",
+      "region": "Auvergne-Rhone-Alpes",
       "pm": 2018,
       "exact": 32,
       "zones": 2018,
@@ -707,6 +777,7 @@
     {
       "code": "70",
       "nom": "Haute-Saone",
+      "region": "Bourgogne-Franche-Comte",
       "pm": 381,
       "exact": 58,
       "zones": 381,
@@ -717,6 +788,7 @@
     {
       "code": "71",
       "nom": "Saone-et-Loire",
+      "region": "Bourgogne-Franche-Comte",
       "pm": 962,
       "exact": 36,
       "zones": 962,
@@ -727,6 +799,7 @@
     {
       "code": "72",
       "nom": "Sarthe",
+      "region": "Pays de la Loire",
       "pm": 829,
       "exact": 806,
       "zones": 829,
@@ -737,6 +810,7 @@
     {
       "code": "73",
       "nom": "Savoie",
+      "region": "Auvergne-Rhone-Alpes",
       "pm": 987,
       "exact": 123,
       "zones": 987,
@@ -747,6 +821,7 @@
     {
       "code": "74",
       "nom": "Haute-Savoie",
+      "region": "Auvergne-Rhone-Alpes",
       "pm": 1576,
       "exact": 301,
       "zones": 1576,
@@ -757,6 +832,7 @@
     {
       "code": "75",
       "nom": "Paris",
+      "region": "Ile-de-France",
       "pm": 985,
       "exact": 0,
       "zones": 985,
@@ -767,6 +843,7 @@
     {
       "code": "76",
       "nom": "Seine-Maritime",
+      "region": "Normandie",
       "pm": 1873,
       "exact": 96,
       "zones": 1873,
@@ -777,6 +854,7 @@
     {
       "code": "77",
       "nom": "Seine-et-Marne",
+      "region": "Ile-de-France",
       "pm": 1704,
       "exact": 35,
       "zones": 1704,
@@ -787,6 +865,7 @@
     {
       "code": "78",
       "nom": "Yvelines",
+      "region": "Ile-de-France",
       "pm": 2169,
       "exact": 191,
       "zones": 2169,
@@ -797,6 +876,7 @@
     {
       "code": "79",
       "nom": "Deux-Sevres",
+      "region": "Nouvelle-Aquitaine",
       "pm": 787,
       "exact": 181,
       "zones": 787,
@@ -807,6 +887,7 @@
     {
       "code": "80",
       "nom": "Somme",
+      "region": "Hauts-de-France",
       "pm": 769,
       "exact": 45,
       "zones": 769,
@@ -817,6 +898,7 @@
     {
       "code": "81",
       "nom": "Tarn",
+      "region": "Occitanie",
       "pm": 658,
       "exact": 80,
       "zones": 658,
@@ -827,6 +909,7 @@
     {
       "code": "82",
       "nom": "Tarn-et-Garonne",
+      "region": "Occitanie",
       "pm": 382,
       "exact": 111,
       "zones": 382,
@@ -837,6 +920,7 @@
     {
       "code": "83",
       "nom": "Var",
+      "region": "Provence-Alpes-Cote d'Azur",
       "pm": 2141,
       "exact": 18,
       "zones": 2141,
@@ -847,6 +931,7 @@
     {
       "code": "84",
       "nom": "Vaucluse",
+      "region": "Provence-Alpes-Cote d'Azur",
       "pm": 966,
       "exact": 10,
       "zones": 966,
@@ -857,6 +942,7 @@
     {
       "code": "85",
       "nom": "Vendee",
+      "region": "Pays de la Loire",
       "pm": 1286,
       "exact": 111,
       "zones": 1286,
@@ -867,6 +953,7 @@
     {
       "code": "86",
       "nom": "Vienne",
+      "region": "Nouvelle-Aquitaine",
       "pm": 846,
       "exact": 27,
       "zones": 846,
@@ -877,6 +964,7 @@
     {
       "code": "87",
       "nom": "Haute-Vienne",
+      "region": "Nouvelle-Aquitaine",
       "pm": 760,
       "exact": 149,
       "zones": 760,
@@ -887,6 +975,7 @@
     {
       "code": "88",
       "nom": "Vosges",
+      "region": "Grand Est",
       "pm": 487,
       "exact": 36,
       "zones": 487,
@@ -897,6 +986,7 @@
     {
       "code": "89",
       "nom": "Yonne",
+      "region": "Bourgogne-Franche-Comte",
       "pm": 569,
       "exact": 93,
       "zones": 569,
@@ -907,6 +997,7 @@
     {
       "code": "90",
       "nom": "Territoire de Belfort",
+      "region": "Bourgogne-Franche-Comte",
       "pm": 260,
       "exact": 218,
       "zones": 260,
@@ -917,6 +1008,7 @@
     {
       "code": "91",
       "nom": "Essonne",
+      "region": "Ile-de-France",
       "pm": 1554,
       "exact": 278,
       "zones": 1554,
@@ -927,6 +1019,7 @@
     {
       "code": "92",
       "nom": "Hauts-de-Seine",
+      "region": "Ile-de-France",
       "pm": 631,
       "exact": 8,
       "zones": 631,
@@ -937,6 +1030,7 @@
     {
       "code": "93",
       "nom": "Seine-Saint-Denis",
+      "region": "Ile-de-France",
       "pm": 1752,
       "exact": 39,
       "zones": 1752,
@@ -947,6 +1041,7 @@
     {
       "code": "94",
       "nom": "Val-de-Marne",
+      "region": "Ile-de-France",
       "pm": 1529,
       "exact": 113,
       "zones": 1529,
@@ -957,6 +1052,7 @@
     {
       "code": "95",
       "nom": "Val-d'Oise",
+      "region": "Ile-de-France",
       "pm": 1454,
       "exact": 217,
       "zones": 1454,
@@ -967,6 +1063,7 @@
     {
       "code": "971",
       "nom": "Guadeloupe",
+      "region": "Outre-mer",
       "pm": 805,
       "exact": 33,
       "zones": 805,
@@ -977,6 +1074,7 @@
     {
       "code": "972",
       "nom": "Martinique",
+      "region": "Outre-mer",
       "pm": 656,
       "exact": 14,
       "zones": 656,
@@ -987,6 +1085,7 @@
     {
       "code": "973",
       "nom": "Guyane",
+      "region": "Outre-mer",
       "pm": 326,
       "exact": 15,
       "zones": 326,
@@ -997,6 +1096,7 @@
     {
       "code": "974",
       "nom": "La Reunion",
+      "region": "Outre-mer",
       "pm": 1593,
       "exact": 4,
       "zones": 1593,
@@ -1007,6 +1107,7 @@
     {
       "code": "976",
       "nom": "Mayotte",
+      "region": "Outre-mer",
       "pm": 144,
       "exact": 0,
       "zones": 144,
@@ -1017,6 +1118,7 @@
     {
       "code": "977",
       "nom": "Saint-Barthelemy",
+      "region": "Outre-mer",
       "pm": 14,
       "exact": 0,
       "zones": 14,
@@ -1027,6 +1129,7 @@
     {
       "code": "978",
       "nom": "Saint-Martin",
+      "region": "Outre-mer",
       "pm": 62,
       "exact": 0,
       "zones": 62,

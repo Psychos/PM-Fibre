@@ -12,8 +12,8 @@ android {
         applicationId = "com.pmfibre.app"
         minSdk = 24
         targetSdk = 35
-        versionCode = 5
-        versionName = "1.11"
+        versionCode = 6
+        versionName = "1.12"
     }
 
     buildTypes {
@@ -36,6 +36,12 @@ android {
     buildFeatures {
         compose = true
     }
+    // Tests JVM (pas d'emulateur) : le lecteur tar de DepStore s'y eprouve sur de
+    // vraies archives. `isReturnDefaultValues` evite l'erreur « not mocked » sur
+    // les appels Android que la classe porte par ailleurs.
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+    }
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -53,6 +59,8 @@ dependencies {
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
+
+    testImplementation("junit:junit:4.13.2")
 
     implementation("com.google.android.gms:play-services-location:21.3.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")

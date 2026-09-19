@@ -523,7 +523,46 @@ composé, sa liste et son défilement sont intacts. Idem pour `AddPmScreen`,
    `retired_at`, `dataset_version`, `pm_tags`, `pm_access`, `pm_photos`,
    `tombstones` et les index de date qu'exige la synchro par `since`.
    `pm_access` est délibérément séparée de `pm`, que l'import réécrit.
-6. App : données hors assets, écran des départements, vérification de mise à jour
+6. **App : données hors assets, écran des départements, vérification de mise à
+   jour** — *fait*
+
+   `pm_full.json` (1,3 Mo) et `zones_normandie.json` (1,7 Mo) quittent l'APK ;
+   il ne reste que `oi_map.json` et `cp_normandie.json`, et l'app **démarre
+   vide** — un état normal, pas une erreur, annoncé par un bandeau qui mène à
+   l'écran Départements. `DepStore.kt` télécharge `deps/<code>.tgz`, vérifie le
+   sha256 **avant** d'en extraire quoi que ce soit, écrit dans `<code>.tmp/`
+   qu'il renomme une fois complet, et n'accepte du tar que les deux membres
+   `pm.json` et `zones.json` — aucun nom d'entrée ne peut donc désigner un
+   chemin. `PmRepository.load()` lit `filesDir/deps/` au lieu des assets ; un
+   paquet illisible est ignoré plutôt que fatal.
+
+   Le regroupement par région vit **dans le manifeste**, comme `max_deps` : un
+   découpage administratif qui bouge se corrige en régénérant les données, sans
+   republier l'APK. Les cases ne sont pas grisées au plafond — « 6/6 — décochez
+   un département pour en ajouter un » dit *pourquoi*, ce qu'une case désactivée
+   ne fait pas. Le déchargement ne touche ni les positions, ni les PM ajoutés,
+   ni les commentaires (§ 3.3), et la boîte de confirmation le dit.
+
+   La vérification de lancement suit § 3.4 : `If-None-Match`, 3 s, une fois par
+   24 h, uniquement si `ConnectivityManager` signale du réseau, et elle
+   n'allume qu'un bandeau — « Plus tard », « Ignorer cette version », « Mettre à
+   jour ». Rien ne se télécharge sans un geste explicite. Le curseur de synchro
+   est désormais mémorisé **avec son périmètre** : installer un département
+   remet la synchro à un inventaire complet, sans quoi un différentiel « depuis
+   hier » ne rendrait rien du département qu'on vient d'ajouter.
+
+   `versionCode` passe à 6, valeur qu'exige le `min_app_version` du manifeste.
+
+   Deux écarts assumés :
+
+   - **Pas de WorkManager** (reprise en tâche de fond, « Wi-Fi seulement »),
+     annoncé en § 3.2. Un paquet pèse ~80 Ko, six font 500 Ko ; ce que
+     WorkManager apportait vraiment ici — écriture atomique et intégrité — est
+     assuré autrement. À reprendre si l'on distribue un jour plus lourd.
+   - **`cp_normandie.json` reste normand.** La recherche par code postal ne
+     marche donc qu'en Normandie : les paquets ARCEP ne portent aucun code
+     postal, il faudra une autre source (base officielle des codes postaux) pour
+     l'étendre aux 103 départements.
 
 ### Ensuite, sans urgence
 

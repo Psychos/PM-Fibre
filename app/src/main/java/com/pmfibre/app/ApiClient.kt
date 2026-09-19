@@ -307,7 +307,8 @@ object ApiClient {
             lgt = if (o.isNull("lgt")) null else o.optInt("lgt"),
             tot = if (o.isNull("tot")) null else o.optInt("tot"),
             lat = lat, lon = lon, precise = false,
-            op = optStr(o, "op"), userAdded = true
+            op = optStr(o, "op"), userAdded = true,
+            depCode = optStr(o, "dep_code")
         )
     }
 

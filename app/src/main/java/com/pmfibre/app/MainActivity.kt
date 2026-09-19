@@ -10,6 +10,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -256,8 +257,11 @@ fun LoginScreen(onLoggedIn: () -> Unit, initialMessage: String? = null) {
 }
 
 /** Message d'erreur lisible à partir d'une exception réseau/API. */
-private fun errorMessage(e: Exception): String = when (e) {
+internal fun errorMessage(e: Exception): String = when (e) {
     is ApiClient.ApiException -> e.message ?: "Erreur ${e.status}"
+    // DepStore dit déjà ce qui a échoué (empreinte, archive, HTTP) : le répéter
+    // « serveur injoignable » ferait chercher du réseau là où il n'y a rien.
+    is DepStore.DepException -> e.message ?: "Téléchargement impossible."
     else -> "Serveur injoignable. Vérifie la connexion. (${e.message})"
 }
 
@@ -270,15 +274,38 @@ fun MainScreen(onLogout: () -> Unit) {
     var showAdd by remember { mutableStateOf(false) }
     var showAdmin by remember { mutableStateOf(false) }
     var showHelp by remember { mutableStateOf(false) }
+    var showDeps by remember { mutableStateOf(false) }
     var syncInfo by remember { mutableStateOf<String?>(null) }
+    var majDisponible by remember { mutableStateOf<String?>(null) }
+    var revision by remember { mutableIntStateOf(0) }   // force le recalcul après un (dé)chargement
 
     // Synchro bidirectionnelle des positions au démarrage.
-    LaunchedEffect(Unit) {
+    LaunchedEffect(revision) {
         val token = SessionStore.token ?: return@LaunchedEffect
         try {
             syncInfo = "Synchro : " + Sync.run(context, token)
         } catch (e: Exception) {
             syncInfo = "⚠️ Serveur injoignable (${ApiClient.baseUrl}). Es-tu sur le même réseau ? — ${errorMessage(e)}"
+        }
+    }
+
+    // Vérification de mise à jour des données (roadmap 3.4) : au plus une par
+    // 24 h, seulement si le réseau est là, jamais bloquante — un échec ne produit
+    // rien d'affiché. Elle ne fait qu'allumer un bandeau ; rien ne se télécharge
+    // sans que l'utilisateur ouvre l'écran Départements.
+    LaunchedEffect(Unit) {
+        if (!DepStore.verificationDue(context) || !DepStore.reseauDisponible(context)) {
+            return@LaunchedEffect
+        }
+        val installe = DepStore.manifesteLocal(context)?.dataset
+        try {
+            val distant = DepStore.recupereManifeste(context) ?: return@LaunchedEffect
+            DepStore.marqueVerifiee(context)
+            if (DepStore.miseAJourDisponible(context, distant, installe)) {
+                majDisponible = distant.dataset
+            }
+        } catch (_: Exception) {
+            // Hors ligne, site indisponible : on réessaiera dans 24 h.
         }
     }
 
@@ -297,6 +324,10 @@ fun MainScreen(onLogout: () -> Unit) {
     }
     if (showHelp) {
         HelpScreen(onBack = { showHelp = false })
+        return
+    }
+    if (showDeps) {
+        DepScreen(onBack = { showDeps = false }, onChanged = { revision++ })
         return
     }
 
@@ -340,12 +371,34 @@ fun MainScreen(onLogout: () -> Unit) {
         }
     ) { innerPadding ->
         Column(modifier = Modifier.padding(innerPadding).fillMaxSize()) {
+            majDisponible?.let { dataset ->
+                BandeauMiseAJour(
+                    dataset = dataset,
+                    onOuvrir = { majDisponible = null; showDeps = true },
+                    onPlusTard = { majDisponible = null },
+                    onIgnorer = { DepStore.ignore(context, dataset); majDisponible = null }
+                )
+            }
+            // L'app démarre sans données (roadmap 3.2) : le dire, plutôt que
+            // laisser croire à une recherche qui ne trouve rien.
+            val nbPm = remember(revision) { PmRepository.size }
+            if (nbPm == 0) {
+                Text(
+                    "Aucun département installé — onglet Compte, « Installer un département ».",
+                    modifier = Modifier.fillMaxWidth()
+                        .background(Color(0xFFE3F2FD))
+                        .clickable { showDeps = true }
+                        .padding(12.dp),
+                    fontSize = 14.sp, color = BlueDark
+                )
+            }
             when (tab) {
                 0 -> SearchScreen(onSelect = { selected = it }, onAddPm = { showAdd = true })
                 1 -> NearbyScreen(onSelect = { selected = it })
                 2 -> MapScreen(onSelect = { selected = it })
                 else -> InfoScreen(syncInfo = syncInfo, onLogout = onLogout,
-                    onOpenAdmin = { showAdmin = true }, onOpenHelp = { showHelp = true })
+                    onOpenAdmin = { showAdmin = true }, onOpenHelp = { showHelp = true },
+                    onOpenDeps = { showDeps = true })
             }
         }
     }
@@ -586,7 +639,8 @@ fun ServingPmCard(serving: ServingPm?, onSelect: (Pm) -> Unit) {
 
 /** Onglet 3 : informations + export/import des positions enregistrées. */
 @Composable
-fun InfoScreen(syncInfo: String?, onLogout: () -> Unit, onOpenAdmin: () -> Unit, onOpenHelp: () -> Unit) {
+fun InfoScreen(syncInfo: String?, onLogout: () -> Unit, onOpenAdmin: () -> Unit,
+               onOpenHelp: () -> Unit, onOpenDeps: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var savedCount by remember { mutableIntStateOf(PmRepository.savedCount) }
@@ -658,9 +712,16 @@ fun InfoScreen(syncInfo: String?, onLogout: () -> Unit, onOpenAdmin: () -> Unit,
     ) {
         Text("Données", fontWeight = FontWeight.Bold, fontSize = 20.sp)
         Spacer(Modifier.height(8.dp))
-        Text("Source : ARCEP — ZAPM 2026 T1 (open data)")
+        val manifeste = remember { DepStore.manifesteLocal(context) }
+        val deps = remember { DepStore.installes(context) }
+        Text("Source : ARCEP — ${manifeste?.dataset ?: "ZAPM"} (open data)")
         Text("Nombre de PM : ${PmRepository.size}")
         Text("Positions exactes enregistrées : $savedCount", fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(8.dp))
+        OutlinedButton(onClick = onOpenDeps) {
+            Text(if (deps.isEmpty()) "📦 Installer un département"
+                 else "📦 Départements (${deps.size}) : " + deps.joinToString(", "))
+        }
 
         Spacer(Modifier.height(20.dp))
         Text("Compte", fontWeight = FontWeight.Bold)
