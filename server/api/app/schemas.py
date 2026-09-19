@@ -97,6 +97,10 @@ class PmOut(BaseModel):
     source: str = "arcep"
     created_by: str | None = None
     address: str | None = None
+    # Étiquettes et accès : servis avec la fiche, pas par deux appels de plus —
+    # ils sont affichés dès l'ouverture, en tête (§ 3.7).
+    tags: list[str] = []
+    access: "AccessOut | None" = None
 
 
 class PmListItem(BaseModel):
@@ -178,3 +182,81 @@ class SyncPositionsOut(BaseModel):
     complete: bool           # False -> rappeler immédiatement
     positions: list[SyncPositionOut]
     deleted: list[str]       # PM dont la position a été supprimée depuis `since`
+
+
+# ---- Étiquettes et accès (§ 3.6, § 3.7) ----
+class AccessIn(BaseModel):
+    """« Comment y accéder » : indication courte, et le point d'accès s'il diffère.
+
+    Les trois champs sont facultatifs et remis à zéro par `null` : vider la note
+    est une opération légitime (l'accès a changé, la haie a été arrachée).
+    """
+    note: str | None = Field(default=None, max_length=255)
+    lat: float | None = Field(default=None, ge=-90, le=90)
+    lon: float | None = Field(default=None, ge=-180, le=180)
+
+
+class AccessOut(BaseModel):
+    note: str | None = None
+    lat: float | None = None
+    lon: float | None = None
+    author: str | None = None
+    updated_at: datetime
+
+
+class TagsIn(BaseModel):
+    """L'ensemble complet des étiquettes du PM, pas un ajout.
+
+    Le client envoie ce qu'il voit après sa modification ; le serveur en déduit
+    les ajouts et les retraits. Un PATCH incrémental obligerait l'application
+    hors ligne à tenir une file d'ajouts et de retraits ordonnée, pour un objet
+    qui tient en six cases à cocher.
+    """
+    tags: list[str] = Field(default_factory=list, max_length=32)
+
+
+class TagOut(BaseModel):
+    tag: str
+    family: str
+    author: str | None = None
+    created_at: datetime
+
+
+# ---- Synchronisation des étiquettes et des accès (§ 4.1) ----
+class SyncTagOut(BaseModel):
+    code: str
+    tag: str
+    family: str
+    author: str | None = None
+    created_at: datetime
+
+
+class SyncAccessOut(BaseModel):
+    code: str
+    note: str | None = None
+    lat: float | None = None
+    lon: float | None = None
+    author: str | None = None
+    updated_at: datetime
+
+
+class SyncMetaOut(BaseModel):
+    """Même contrat que `SyncPositionsOut`, pour ce qui n'est pas une position.
+
+    Un seul curseur pour les deux familles : deux curseurs séparés se seraient
+    désynchronisés au premier appel interrompu, et rien ne dit qu'une étiquette
+    et une note d'accès arrivent dans le même ordre.
+    """
+    deps: list[str]
+    since: datetime | None
+    next_since: datetime
+    complete: bool
+    tags: list[SyncTagOut]
+    access: list[SyncAccessOut]
+    deleted_tags: list[str]     # "code|tag", le couple retiré
+    deleted_access: list[str]   # codes dont l'accès a été effacé
+
+
+# `PmOut` cite `AccessOut`, défini plus bas : la référence avant déclaration
+# doit être résolue une fois le module entièrement lu.
+PmOut.model_rebuild()

@@ -17,7 +17,7 @@ from .db import Base, engine, get_db, wait_for_db
 from . import models
 from .models import (
     User, Pm, PmPosition, PmPositionHistory, PmComment, PmConfirmation,
-    Session as SessionModel, Setting, Tombstone,
+    PmTag, PmAccess, Session as SessionModel, Setting, Tombstone,
 )
 from . import schemas
 from . import auth
@@ -295,6 +295,7 @@ def get_pm(code: str, db: OrmSession = Depends(get_db), user: User = Depends(aut
         position=_position_out(pos), osm_lat=pm.osm_lat, osm_lon=pm.osm_lon,
         confirmations=conf_count, confirmed_by_me=confirmed_by_me,
         source=pm.source, created_by=pm.created_by, address=pm.address,
+        tags=_tags_of(db, code), access=_access_of(db, code),
     )
 
 
@@ -513,6 +514,200 @@ def sync_positions(
         deleted=[t.pm_code for t in tombes],
     )
 
+
+# =========================================================================
+# ÉTIQUETTES ET ACCÈS (§ 3.6, § 3.7)
+# =========================================================================
+
+# Listes arrêtées avec Olivier d'après son terrain réel (§ 3.6). Le serveur les
+# tient, pas le client : une application installée reste sur le téléphone des
+# mois, et une étiquette ajoutée ici ne doit pas obliger à publier un APK.
+# Rien n'est accepté hors de cette table — sans quoi la première faute de frappe
+# d'un client créerait une étiquette fantôme que personne ne pourrait filtrer.
+ETIQUETTES: dict[str, str] = {
+    # Accès : ce qui rend le PM difficile à trouver ou à atteindre.
+    "acces_haie": "acces",
+    "acces_impasse": "acces",
+    "acces_arriere": "acces",
+    "acces_portail": "acces",
+    "acces_vegetation": "acces",
+    "acces_non_visible": "acces",
+    # Type de site.
+    "site_shelter": "site",
+    "site_armoire": "site",
+    "site_local": "site",
+    "site_autre": "site",
+}
+
+
+def _tags_of(db: OrmSession, code: str) -> list[str]:
+    return list(db.scalars(
+        select(PmTag.tag).where(PmTag.pm_code == code).order_by(PmTag.tag)))
+
+
+def _access_of(db: OrmSession, code: str) -> schemas.AccessOut | None:
+    a = db.get(PmAccess, code)
+    if a is None or (a.note is None and a.lat is None):
+        return None
+    return schemas.AccessOut(note=a.note, lat=a.lat, lon=a.lon,
+                             author=a.author, updated_at=a.updated_at)
+
+
+@app.get("/pm/{code}/tags", response_model=list[schemas.TagOut])
+def list_tags(code: str, db: OrmSession = Depends(get_db),
+              user: User = Depends(auth.get_current_user)):
+    return list(db.scalars(select(PmTag).where(PmTag.pm_code == code).order_by(PmTag.tag)))
+
+
+@app.put("/pm/{code}/tags", response_model=list[schemas.TagOut])
+def set_tags(code: str, body: schemas.TagsIn, db: OrmSession = Depends(get_db),
+             user: User = Depends(auth.get_current_user)):
+    """Remplace l'ensemble des étiquettes du PM par celui reçu.
+
+    Une étiquette n'appartient à personne : elle décrit le terrain, pas un avis.
+    N'importe quel utilisateur peut donc en retirer une devenue fausse — la haie
+    a été arrachée, le portail a disparu. L'auteur du premier dépôt est conservé,
+    et chaque retrait laisse une pierre tombale, sans quoi les téléphones déjà
+    synchronisés garderaient l'étiquette indéfiniment (§ 4.1).
+    """
+    if db.get(Pm, code) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "PM inconnu")
+
+    voulus = {t.strip().lower() for t in body.tags if t and t.strip()}
+    inconnus = sorted(voulus - ETIQUETTES.keys())
+    if inconnus:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            "Étiquette inconnue : " + ", ".join(inconnus))
+
+    actuels = {t.tag: t for t in db.scalars(select(PmTag).where(PmTag.pm_code == code))}
+
+    for tag in voulus - actuels.keys():
+        db.add(PmTag(pm_code=code, tag=tag, family=ETIQUETTES[tag], author=user.username))
+    for tag in actuels.keys() - voulus:
+        db.delete(actuels[tag])
+        db.add(Tombstone(kind="tag", pm_code=code, ref=tag, author=user.username))
+
+    db.commit()
+    return list_tags(code, db, user)
+
+
+@app.get("/pm/{code}/access", response_model=schemas.AccessOut | None)
+def get_access(code: str, db: OrmSession = Depends(get_db),
+               user: User = Depends(auth.get_current_user)):
+    return _access_of(db, code)
+
+
+@app.put("/pm/{code}/access", response_model=schemas.AccessOut | None)
+def set_access(code: str, body: schemas.AccessIn, db: OrmSession = Depends(get_db),
+               user: User = Depends(auth.get_current_user)):
+    """Indication d'accès et point d'accès facultatif.
+
+    Le point d'accès n'est pas soumis à la règle des 10 m ni à la validation de
+    zone ARCEP qui encadrent la position du PM : c'est justement l'endroit où
+    l'on se gare, parfois à cent mètres et dans la rue d'à côté (§ 3.7).
+    Il est en revanche refusé sans latitude ET longitude — un demi-point serait
+    une position fausse silencieuse.
+    """
+    if db.get(Pm, code) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "PM inconnu")
+    if (body.lat is None) != (body.lon is None):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            "Point d'accès incomplet : latitude et longitude vont ensemble")
+
+    note = (body.note or "").strip() or None
+    a = db.get(PmAccess, code)
+    vide = note is None and body.lat is None
+
+    if a is None:
+        if vide:
+            return None
+        db.add(PmAccess(pm_code=code, note=note, lat=body.lat, lon=body.lon,
+                        author=user.username))
+    elif vide:
+        # Tout effacer, c'est supprimer la ligne : une ligne de zéros survivrait
+        # à la synchro et réécrirait un accès vide par-dessus celui d'un autre.
+        db.delete(a)
+        db.add(Tombstone(kind="access", pm_code=code, author=user.username))
+    else:
+        a.note, a.lat, a.lon, a.author = note, body.lat, body.lon, user.username
+
+    db.commit()
+    return _access_of(db, code)
+
+
+@app.get("/sync/meta", response_model=schemas.SyncMetaOut)
+def sync_meta(
+    dep: str | None = Query(default=None, description="dep_codes séparés par des virgules"),
+    since: datetime | None = Query(default=None, description="curseur rendu par l'appel précédent"),
+    limit: int = Query(default=LIMITE_SYNC, ge=1, le=5000),
+    db: OrmSession = Depends(get_db),
+    user: User = Depends(auth.get_current_user),
+):
+    """Étiquettes et accès modifiés depuis `since`, mêmes règles que les positions.
+
+    Un seul curseur pour les deux familles et pour les suppressions : il vaut le
+    plus petit des horodatages non entièrement livrés, de sorte que la garantie
+    reste celle de `/sync/positions` — tout ce qui porte un horodatage
+    <= `next_since` a été servi.
+    """
+    deps = _departements_demandes(dep)
+
+    base_tags = select(PmTag).join(Pm, Pm.code == PmTag.pm_code)
+    base_acc = select(PmAccess).join(Pm, Pm.code == PmAccess.pm_code)
+    if deps:
+        base_tags = base_tags.where(Pm.dep_code.in_(deps))
+        base_acc = base_acc.where(Pm.dep_code.in_(deps))
+
+    base_del = (select(Tombstone)
+                .outerjoin(Pm, Pm.code == Tombstone.pm_code)
+                .where(Tombstone.kind.in_(("tag", "access"))))
+    if deps:
+        base_del = base_del.where(Pm.dep_code.in_(deps) | Pm.code.is_(None))
+
+    q_tags = base_tags if since is None else base_tags.where(PmTag.created_at > since)
+    q_acc = base_acc if since is None else base_acc.where(PmAccess.updated_at > since)
+    tags = list(db.scalars(q_tags.order_by(PmTag.created_at.asc()).limit(limit)))
+    acces = list(db.scalars(q_acc.order_by(PmAccess.updated_at.asc()).limit(limit)))
+
+    tombes = []
+    if since is not None:
+        tombes = list(db.scalars(base_del.where(Tombstone.deleted_at > since)
+                                 .order_by(Tombstone.deleted_at.asc()).limit(limit)))
+
+    bornes = []
+    if len(tags) == limit:
+        bornes.append(tags[-1].created_at)
+    if len(acces) == limit:
+        bornes.append(acces[-1].updated_at)
+    if len(tombes) == limit:
+        bornes.append(tombes[-1].deleted_at)
+
+    if bornes:
+        curseur = min(bornes)
+        complete = False
+        # Comme pour les positions : le curseur est une seconde entière, on sert
+        # le groupe entier plutôt que de le couper — le `> since` du prochain
+        # appel écarterait le reste.
+        tags = ([t for t in tags if t.created_at < curseur]
+                + list(db.scalars(base_tags.where(PmTag.created_at == curseur))))
+        acces = ([a for a in acces if a.updated_at < curseur]
+                 + list(db.scalars(base_acc.where(PmAccess.updated_at == curseur))))
+        tombes = ([t for t in tombes if t.deleted_at < curseur]
+                  + (list(db.scalars(base_del.where(Tombstone.deleted_at == curseur)))
+                     if since is not None else []))
+    else:
+        curseur = db.scalar(select(func.now())) - timedelta(seconds=1)
+        complete = True
+
+    return schemas.SyncMetaOut(
+        deps=deps, since=since, next_since=curseur, complete=complete,
+        tags=[schemas.SyncTagOut(code=t.pm_code, tag=t.tag, family=t.family,
+                                 author=t.author, created_at=t.created_at) for t in tags],
+        access=[schemas.SyncAccessOut(code=a.pm_code, note=a.note, lat=a.lat, lon=a.lon,
+                                      author=a.author, updated_at=a.updated_at) for a in acces],
+        deleted_tags=[f"{t.pm_code}|{t.ref}" for t in tombes if t.kind == "tag"],
+        deleted_access=[t.pm_code for t in tombes if t.kind == "access"],
+    )
 
 @app.get("/pm/{code}/comments", response_model=list[schemas.CommentOut])
 def list_comments(code: str, db: OrmSession = Depends(get_db), user: User = Depends(auth.get_current_user)):
