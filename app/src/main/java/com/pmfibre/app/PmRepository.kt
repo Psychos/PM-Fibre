@@ -156,9 +156,13 @@ object PmRepository {
     }
 
     private fun loadAddedPms(context: Context): List<Pm> {
-        val f = File(context.filesDir, "added_pms.json")
-        if (!f.exists()) return emptyList()
-        return try { parse(f.readText()) } catch (e: Exception) { emptyList() }
+        // Moins critique que les positions : ces PM sont tous connus du serveur,
+        // et `fetchAddedPms` en redescend l'inventaire complet à chaque synchro.
+        // Une perte se répare donc toute seule — il n'y a pas de curseur à
+        // remettre à zéro ici.
+        var lus: List<Pm> = emptyList()
+        Fichiers.lit(context.filesDir, "added_pms.json") { texte -> lus = parse(texte) }
+        return lus
     }
 
     private fun persistAddedPms(context: Context) {
@@ -173,7 +177,7 @@ object PmRepository {
             if (p.depCode != null) put("dep_code", p.depCode)
             put("user", 1)
         })
-        File(context.filesDir, "added_pms.json").writeText(arr.toString())
+        Fichiers.ecrit(context.filesDir, "added_pms.json", arr.toString())
     }
 
     // ---- Positions exactes enregistrées ----
@@ -192,6 +196,9 @@ object PmRepository {
         persistSaved(context)
     }
 
+    /** Bilan d'une fusion : ce qui a été appliqué, et ce qui a été protégé. */
+    data class FusionResult(val appliquees: Int, val protegees: Int)
+
     /** Applique une synchro serveur : positions reçues, puis suppressions.
      *
      *  Les suppressions viennent désormais des pierres tombales (`deleted`) et
@@ -201,15 +208,33 @@ object PmRepository {
      *
      *  La purge par absence n'est conservée que pour un inventaire complet et
      *  national (`full` et périmètre non restreint), seul cas où « absent » veut
-     *  encore dire « supprimé ». */
-    fun mergeServerPositions(context: Context, r: ApiClient.SyncResult): Int {
+     *  encore dire « supprimé ».
+     *
+     *  **Une capture locale non acquittée n'est jamais remplacée.** La garde
+     *  existait pour les suppressions, avec le raisonnement écrit juste en
+     *  dessous, mais pas pour le remplacement : une position relevée sur le
+     *  terrain dont l'envoi venait d'être refusé se faisait écraser par la
+     *  version du serveur, et marquer `synced` — donc jamais retentée. Le relevé
+     *  disparaissait sans un mot. C'est la perte la plus grave que puisse subir
+     *  l'application : le technicien s'est déplacé, et le travail est perdu. */
+    fun mergeServerPositions(context: Context, r: ApiClient.SyncResult): FusionResult {
         val serverCodes = HashSet<String>(r.positions.size)
+        var appliquees = 0
+        var protegees = 0
         for (p in r.positions) {
             serverCodes.add(p.code)
             val existing = saved[p.code]
+            if (existing != null && !existing.synced) {
+                // Le local prime tant qu'il n'est pas remonté. Il repartira au
+                // prochain essai ; c'est au serveur d'arbitrer, pas à la
+                // descente d'effacer ce qu'il n'a jamais reçu.
+                protegees++
+                continue
+            }
             val ts = parseIsoMillis(p.updatedAt) ?: existing?.ts ?: System.currentTimeMillis()
             saved[p.code] = SavedPos(p.lat, p.lon, ts, existing?.note,
                 p.author ?: existing?.author, existing?.accuracyM, synced = true)
+            appliquees++
         }
         for (code in r.deleted) {
             // Une position locale non encore envoyée n'est pas concernée par une
@@ -221,7 +246,17 @@ object PmRepository {
             for (k in stale) saved.remove(k)
         }
         persistSaved(context)
-        return r.positions.size
+        return FusionResult(appliquees, protegees)
+    }
+
+    /** Le serveur a refusé la capture en 409 : il a déjà une position à moins de
+     *  10 m, la nôtre n'apporte rien. On accepte la sienne — c'est le seul refus
+     *  qui ne perd aucune information, et le seul où acquitter est légitime. */
+    fun marqueAcquittee(context: Context, code: String) {
+        val s = saved[code] ?: return
+        if (s.synced) return
+        saved[code] = s.copy(synced = true)
+        persistSaved(context)
     }
 
     /** Positions locales PAS ENCORE envoyées au serveur (captures hors-ligne, migration v3) :
@@ -282,25 +317,50 @@ object PmRepository {
         persistSaved(context)
     }
 
+    private const val FICHIER_POSITIONS = "saved_positions.json"
+
+    /**
+     * Relit les positions enregistrées.
+     *
+     * Ce fichier est le seul endroit où vivent les relevés pas encore remontés :
+     * il est lu à chaque démarrage, et il l'était sans filet. Un JSON tronqué —
+     * application tuée pendant l'écriture, batterie vide — levait une exception
+     * dans le `LaunchedEffect` de démarrage, et l'application ne s'ouvrait plus
+     * du tout, à ce lancement comme à tous les suivants.
+     *
+     * Le parcours écrit dans une table à part et ne publie `saved` qu'une fois la
+     * lecture entière réussie : `Fichiers.lit` peut rappeler ce bloc sur la copie
+     * de secours, et un demi-chargement serait pire que pas de chargement.
+     */
     private fun loadSaved(context: Context) {
         saved.clear()
-        val f = File(context.filesDir, "saved_positions.json")
-        if (!f.exists()) return
-        val o = JSONObject(f.readText())
-        for (k in o.keys()) {
-            val e = o.getJSONObject(k)
-            saved[k] = SavedPos(
-                e.getDouble("lat"), e.getDouble("lon"),
-                e.optLong("ts", 0L), e.optString("note", "").ifEmpty { null },
-                e.optString("author", "").ifEmpty { null },
-                if (e.has("acc")) e.getDouble("acc") else null,
-                e.optInt("s", 0) == 1
-            )
+        val etat = Fichiers.lit(context.filesDir, FICHIER_POSITIONS) { texte ->
+            val lues = HashMap<String, SavedPos>()
+            val o = JSONObject(texte)
+            for (k in o.keys()) {
+                val e = o.getJSONObject(k)
+                lues[k] = SavedPos(
+                    e.getDouble("lat"), e.getDouble("lon"),
+                    e.optLong("ts", 0L), e.optString("note", "").ifEmpty { null },
+                    e.optString("author", "").ifEmpty { null },
+                    if (e.has("acc")) e.getDouble("acc") else null,
+                    e.optInt("s", 0) == 1
+                )
+            }
+            saved.clear()
+            saved.putAll(lues)
+        }
+        if (etat == Fichiers.Etat.SECOURS || etat == Fichiers.Etat.PERDU) {
+            // L'état local n'est plus celui que le curseur de synchro décrit. Un
+            // différentiel « depuis hier » ne rendrait que ce qui a bougé hier,
+            // et tout ce qu'on vient de perdre resterait absent pour de bon.
+            // On redemande l'inventaire complet au prochain appel.
+            Sync.reinitialise(context)
         }
     }
 
     private fun persistSaved(context: Context) {
-        File(context.filesDir, "saved_positions.json").writeText(exportJson())
+        Fichiers.ecrit(context.filesDir, FICHIER_POSITIONS, exportJson())
     }
 
     /** Exporte la base de positions enregistrées en JSON. */

@@ -130,14 +130,25 @@ fun AppRoot() {
     var forcedLogoutMsg by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
-        withContext(Dispatchers.IO) {
-            SessionStore.load(context)
-            PmRepository.load(context)
-            // Etiquettes et indications d'acces : hors ligne comme le reste
-            // (roadmap 3.6). Chargees ici pour que la premiere fiche ouverte
-            // les ait deja, sans attendre la synchro.
-            MetaStore.charge(context)
-            PhotoStore.nettoieTemporaires(context)
+        // Dernier filet. Les magasins se protegent deja chacun (Fichiers), mais
+        // une exception qui remonterait jusqu'ici laisserait `loaded` a false :
+        // l'ecran resterait vide, et il le resterait a chaque lancement suivant
+        // puisque la cause serait toujours la. Mieux vaut ouvrir sur une base
+        // incomplete, que la synchro et l'ecran Departements savent reconstruire,
+        // que de ne pas ouvrir du tout.
+        try {
+            withContext(Dispatchers.IO) {
+                SessionStore.load(context)
+                PmRepository.load(context)
+                // Etiquettes et indications d'acces : hors ligne comme le reste
+                // (roadmap 3.6). Chargees ici pour que la premiere fiche ouverte
+                // les ait deja, sans attendre la synchro.
+                MetaStore.charge(context)
+                PhotoStore.nettoieTemporaires(context)
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e   // l'ecran quitte la composition : ce n'est pas une panne
+        } catch (_: Exception) {
         }
         // Session refusée par le serveur (évincée par une 3ᵉ connexion, expirée après
         // 60 jours, compte désactivé…) : le serveur ne distingue pas la cause exacte au

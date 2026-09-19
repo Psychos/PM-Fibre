@@ -176,21 +176,27 @@ object PhotoStore {
         return f
     }
 
+    /**
+     * File d'attente des photos à envoyer.
+     *
+     * Cet index est la seule chose qui relie un fichier `.jpg` au PM qu'il
+     * illustre : le perdre ne perd pas les images, mais les rend inenvoyables et
+     * donc inutiles. D'où la copie de secours — le serveur, lui, n'a rien à
+     * renvoyer, puisque ces photos ne lui sont jamais parvenues.
+     */
     fun enAttente(context: Context): List<EnAttente> {
-        val f = File(context.filesDir, FILE_ATTENTE)
-        if (!f.exists()) return emptyList()
-        return try {
-            val arr = JSONArray(f.readText())
-            buildList {
+        var lues: List<EnAttente> = emptyList()
+        Fichiers.lit(context.filesDir, FILE_ATTENTE) { texte ->
+            val arr = JSONArray(texte)
+            lues = buildList {
                 for (i in 0 until arr.length()) {
                     val o = arr.getJSONObject(i)
                     add(EnAttente(o.getString("f"), o.getString("code"),
                         o.optString("kind", "pm"), o.optLong("ts", 0L)))
                 }
             }
-        } catch (_: Exception) {
-            emptyList()
         }
+        return lues
     }
 
     fun enAttentePour(context: Context, code: String?): List<EnAttente> =
@@ -211,7 +217,7 @@ object PhotoStore {
             arr.put(JSONObject().put("f", e.fichier).put("code", e.code)
                 .put("kind", e.kind).put("ts", e.ts))
         }
-        File(context.filesDir, FILE_ATTENTE).writeText(arr.toString())
+        Fichiers.ecrit(context.filesDir, FILE_ATTENTE, arr.toString())
     }
 
     // ---- Cache des photos téléchargées ----

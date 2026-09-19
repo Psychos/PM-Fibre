@@ -45,31 +45,35 @@ object MetaStore {
 
     fun charge(context: Context) {
         metas.clear()
-        val f = File(context.filesDir, FICHIER)
-        if (f.exists()) {
-            try {
-                val o = JSONObject(f.readText())
-                for (code in o.keys()) {
-                    val e = o.getJSONObject(code)
-                    val tags = ArrayList<String>()
-                    e.optJSONArray("tags")?.let { a ->
-                        for (i in 0 until a.length()) tags.add(a.getString(i))
-                    }
-                    metas[code] = PmMeta(
-                        tags = tags,
-                        note = e.optString("note", "").ifEmpty { null },
-                        accesLat = if (e.has("lat")) e.getDouble("lat") else null,
-                        accesLon = if (e.has("lon")) e.getDouble("lon") else null,
-                        auteurAcces = e.optString("auteur", "").ifEmpty { null },
-                        tagsSales = e.optInt("td", 0) == 1,
-                        accesSale = e.optInt("ad", 0) == 1,
-                    )
+        val etat = Fichiers.lit(context.filesDir, FICHIER) { texte ->
+            val lues = HashMap<String, PmMeta>()
+            val o = JSONObject(texte)
+            for (code in o.keys()) {
+                val e = o.getJSONObject(code)
+                val tags = ArrayList<String>()
+                e.optJSONArray("tags")?.let { a ->
+                    for (i in 0 until a.length()) tags.add(a.getString(i))
                 }
-            } catch (_: Exception) {
-                // Fichier corrompu : repartir vide vaut mieux que ne pas ouvrir.
-                // La synchro suivante redescend tout ce que le serveur connaît.
-                metas.clear()
+                lues[code] = PmMeta(
+                    tags = tags,
+                    note = e.optString("note", "").ifEmpty { null },
+                    accesLat = if (e.has("lat")) e.getDouble("lat") else null,
+                    accesLon = if (e.has("lon")) e.getDouble("lon") else null,
+                    auteurAcces = e.optString("auteur", "").ifEmpty { null },
+                    tagsSales = e.optInt("td", 0) == 1,
+                    accesSale = e.optInt("ad", 0) == 1,
+                )
             }
+            metas.clear()
+            metas.putAll(lues)
+        }
+        if (etat == Fichiers.Etat.SECOURS || etat == Fichiers.Etat.PERDU) {
+            // Le commentaire d'avant disait « la synchro suivante redescend tout
+            // ce que le serveur connaît » : c'était faux. Le curseur, lui,
+            // survivait au fichier perdu, et la synchro suivante ne redescendait
+            // que le différentiel — donc rien. Les étiquettes et les accès
+            // disparaissaient du téléphone en restant présents sur le serveur.
+            reinitialise(context)
         }
         charge = true
     }
@@ -88,7 +92,7 @@ object MetaStore {
                 if (m.accesSale) put("ad", 1)
             })
         }
-        File(context.filesDir, FICHIER).writeText(o.toString())
+        Fichiers.ecrit(context.filesDir, FICHIER, o.toString())
     }
 
     fun meta(code: String?): PmMeta = metas[code] ?: PmMeta()

@@ -52,9 +52,21 @@ object Sync {
         for ((code, p) in PmRepository.locallyOwnedPositions(me)) {
             try {
                 ApiClient.putPosition(token, code, p.lat, p.lon, p.accuracyM)
+                PmRepository.marqueAcquittee(context, code)
                 uploaded++
+            } catch (e: ApiClient.ApiException) {
+                // 409 : le serveur a déjà une position à moins de 10 m. La nôtre
+                // n'apporte rien, et la sienne est au même endroit — c'est le
+                // seul refus où acquitter ne perd aucune information.
+                //
+                // Tout le reste (422 hors zone, 404, 5xx, réseau) laisse la
+                // capture non acquittée : la descente ne la remplacera pas et
+                // elle repartira au prochain essai. Un PM hors zone repart donc
+                // à chaque synchro et se fera refuser à chaque fois ; c'est une
+                // requête, contre le relevé de terrain d'un technicien.
+                if (e.status == 409) PmRepository.marqueAcquittee(context, code)
             } catch (_: Exception) {
-                // 409 (< 10 m, déjà présente) ou hors-ligne : on ignore.
+                // Hors ligne : on retentera.
             }
         }
         // PM ajoutés par des collègues (hors ARCEP) -> fusion dans la base locale.
@@ -68,7 +80,7 @@ object Sync {
         val deps = PmRepository.departements
         val perimetre = deps.joinToString(",")
         val res = ApiClient.syncPositions(token, curseur(context, perimetre), deps)
-        val merged = withContext(Dispatchers.IO) { PmRepository.mergeServerPositions(context, res) }
+        val fusion = withContext(Dispatchers.IO) { PmRepository.mergeServerPositions(context, res) }
         memoriseCurseur(context, perimetre, res.nextSince)
 
         val metas = syncMeta(context, token, deps, perimetre)
@@ -76,7 +88,11 @@ object Sync {
 
         val suppr = if (res.deleted.isNotEmpty()) " · ${res.deleted.size} retirée(s)" else ""
         val envoi = if (uploaded > 0) " · $uploaded envoyée(s)" else ""
-        return "$merged position(s) partagée(s)$suppr$envoi$metas$photos"
+        // Les captures protégées sont dites : c'est le seul moment où l'on peut
+        // signaler qu'un relevé n'est toujours pas parti, sans quoi l'utilisateur
+        // croirait la synchro complète.
+        val garde = if (fusion.protegees > 0) " · ${fusion.protegees} gardée(s) en local" else ""
+        return "${fusion.appliquees} position(s) partagée(s)$suppr$envoi$garde$metas$photos"
     }
 
     /**
