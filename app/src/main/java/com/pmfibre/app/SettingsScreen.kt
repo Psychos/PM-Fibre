@@ -260,9 +260,9 @@ private fun RubriqueAffichage() {
 
     TitreSection("Repères de position")
     Paragraphe(
-        "✅ rond vert = position relevée sur place · ≈ carré rouge = centre de zone " +
+        "✅ rond cyan = position relevée sur place · ≈ carré rouge = centre de zone " +
             "ARCEP. La forme dit la même chose que la couleur : environ 8 % des hommes " +
-            "confondent le vert et le rouge, et c'est la population du terrain."
+            "confondent le rouge et le vert, et c'est la population du terrain."
     )
 }
 

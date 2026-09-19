@@ -12,7 +12,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 
 /**
- * Couleurs métier, celles qui ne rentrent dans aucun rôle Material : le vert et le
+ * Couleurs métier, celles qui ne rentrent dans aucun rôle Material : le cyan et le
  * rouge d'une position, l'orange d'un avertissement, le bleu de « ma position ».
  *
  * Elles étaient jusqu'ici codées en dur dans cinq fichiers (`BluePrimary`,
@@ -25,7 +25,15 @@ import androidx.compose.ui.unit.Density
  * disent la même chose que la teinte.
  */
 data class CouleursPm(
-    /** Position relevée sur place. */
+    /**
+     * Position relevée sur place.
+     *
+     * Cyan, et non plus vert : sur le fond IGN, la végétation occupe la moitié de
+     * l'écran en zone rurale — c'est-à-dire là où l'on cherche un PM — et un point
+     * vert y disparaît. Le cyan n'existe quasiment pas dans un paysage : ni la
+     * végétation, ni les toits, ni les routes, ni les terres labourées. Il reste
+     * franchement distinct du bleu de « ma position », qui tire vers l'indigo.
+     */
     val exact: Color,
     /** Centre de zone ARCEP, à préciser. */
     val approx: Color,
@@ -39,12 +47,12 @@ data class CouleursPm(
 )
 
 private val CouleursClaires = CouleursPm(
-    exact = Color(0xFF2E7D32), approx = Color(0xFFD32F2F), avert = Color(0xFFE65100),
+    exact = Color(0xFF00B8D4), approx = Color(0xFFD32F2F), avert = Color(0xFFE65100),
     moi = Color(0xFF1565C0), bandeau = Color(0xFFE3F2FD), surBandeau = Color(0xFF0D47A1)
 )
 
 private val CouleursSombres = CouleursPm(
-    exact = Color(0xFF66BB6A), approx = Color(0xFFEF5350), avert = Color(0xFFFFA726),
+    exact = Color(0xFF00E5FF), approx = Color(0xFFEF5350), avert = Color(0xFFFFA726),
     moi = Color(0xFF64B5F6), bandeau = Color(0xFF12314F), surBandeau = Color(0xFFBBDEFB)
 )
 
@@ -54,13 +62,15 @@ private val CouleursSombres = CouleursPm(
  * vision.
  */
 private val CouleursClairesContraste = CouleursClaires.copy(
-    exact = Color(0xFF1B5E20), approx = Color(0xFFB71C1C), avert = Color(0xFFBF360C),
+    exact = Color(0xFF0097A7), approx = Color(0xFFB71C1C), avert = Color(0xFFBF360C),
     moi = Color(0xFF0D47A1), bandeau = Color(0xFFFFFFFF), surBandeau = Color(0xFF000000)
 )
 
 private val CouleursSombresContraste = CouleursSombres.copy(
-    exact = Color(0xFF8BF08F), approx = Color(0xFFFF8A80), avert = Color(0xFFFFCC80),
-    moi = Color(0xFF90CAF9), bandeau = Color(0xFF000000), surBandeau = Color(0xFFFFFFFF)
+    exact = Color(0xFF84FFFF), approx = Color(0xFFFF8A80), avert = Color(0xFFFFCC80),
+    // Bleu plus soutenu que dans le thème sombre ordinaire : face au cyan pâle
+    // ci-dessus, le 90CAF9 d'origine n'était plus qu'un autre bleu pâle.
+    moi = Color(0xFF448AFF), bandeau = Color(0xFF000000), surBandeau = Color(0xFFFFFFFF)
 )
 
 val LocalCouleursPm = staticCompositionLocalOf { CouleursClaires }

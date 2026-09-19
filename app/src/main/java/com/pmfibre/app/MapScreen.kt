@@ -105,18 +105,23 @@ private val OrthoIGN = object : OnlineTileSourceBase(
             "&TILECOL=" + MapTileIndex.getX(pMapTileIndex)
 }
 
-/** Petit point bleu (halo blanc) pour matérialiser « Ma position ». */
-private fun blueDotIcon(context: Context): Drawable {
+/**
+ * Petit point bleu (halo blanc) pour matérialiser « Ma position ».
+ *
+ * La couleur vient du thème : elle était écrite en dur ici, si bien que les deux
+ * thèmes à fort contraste n'y changeaient rien.
+ */
+private fun blueDotIcon(context: Context, couleur: Int): Drawable {
     val d = context.resources.displayMetrics.density
-    val size = (18 * d).toInt().coerceAtLeast(18)
+    val size = (22 * d).toInt().coerceAtLeast(22)
     val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
     val cv = Canvas(bmp)
     val p = Paint(Paint.ANTI_ALIAS_FLAG)
     val r = size / 2f
     p.color = AndroidColor.WHITE
-    cv.drawCircle(r, r, r, p)                    // halo blanc
-    p.color = AndroidColor.rgb(0x15, 0x65, 0xC0) // bleu
-    cv.drawCircle(r, r, r * 0.68f, p)
+    cv.drawCircle(r, r, r, p)        // halo blanc
+    p.color = couleur
+    cv.drawCircle(r, r, r * 0.62f, p)
     return BitmapDrawable(context.resources, bmp)
 }
 
@@ -192,6 +197,7 @@ fun MapScreen(onSelect: (Pm) -> Unit) {
     // du thème doit être convertie en entier ARGB Android.
     val couleurExact = couleurs.exact.toArgb()
     val couleurApprox = couleurs.approx.toArgb()
+    val couleurMoi = couleurs.moi.toArgb()
     val rayonPoint = if (Settings.cartePointsGros) 9f else 6f
 
     var maPosition by remember { mutableStateOf<GeoPoint?>(null) }
@@ -243,7 +249,7 @@ fun MapScreen(onSelect: (Pm) -> Unit) {
                 PmRepository.size == 0 -> "Aucun département installé"
                 n == 0 -> "Aucun PM dans cette zone"
                 n >= MAX_POINTS -> n.toString() + "+ PM — zoome pour tout voir"
-                else -> n.toString() + " PM · ● vert = relevé sur place · ■ rouge = centre de zone"
+                else -> n.toString() + " PM · ● cyan = relevé sur place · ■ rouge = centre de zone"
             }
         }
     }
@@ -348,8 +354,10 @@ fun MapScreen(onSelect: (Pm) -> Unit) {
                 }
 
                 // Deux couches, une par statut. La forme distingue autant que la
-                // couleur : environ 8 % des hommes confondent le vert et le rouge,
-                // et c'est justement la population du terrain.
+                // couleur : environ 8 % des hommes confondent le rouge et le vert,
+                // et c'est justement la population du terrain. Le cyan s'ajoute à
+                // ce garde-fou plutôt qu'il ne le remplace : il reste franc pour
+                // une deutéranopie, là où le vert d'origine virait au beige.
                 ajouteCouche(
                     map, groupes.filter { it.exact }, couleurExact,
                     SimpleFastPointOverlayOptions.Shape.CIRCLE, densite,
@@ -387,7 +395,7 @@ fun MapScreen(onSelect: (Pm) -> Unit) {
                     map.overlays.add(Marker(map).apply {
                         position = p
                         title = "Ma position"
-                        icon = blueDotIcon(map.context)
+                        icon = blueDotIcon(map.context, couleurMoi)
                         setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
                     })
                 }
@@ -442,6 +450,12 @@ fun MapScreen(onSelect: (Pm) -> Unit) {
  * un affichage en retard d'un glissement. `MEDIUM_OPTIMIZATION` recalcule à chaque
  * dessin, ce qui est sans conséquence sur une liste déjà bornée par le rectangle
  * visible, et il sait afficher les libellés.
+ *
+ * Chaque couche est dessinée deux fois : un cerne blanc un peu plus large, puis le
+ * point par-dessus. Aucune teinte ne tient seule sur une orthophoto, qui contient
+ * déjà toutes les couleurs — un point clair se perd sur un toit clair, un point
+ * sombre sur une haie. Le cerne, lui, borne le point quel que soit le fond, et il
+ * fait aussi office de repère de taille face au point bleu de « ma position ».
  */
 private fun ajouteCouche(
     map: MapView,
@@ -457,6 +471,26 @@ private fun ajouteCouche(
     if (groupes.isEmpty()) return
     val points = ArrayList<IGeoPoint>(groupes.size)
     for (g in groupes) points.add(LabelledGeoPoint(g.lat, g.lon, g.libelle))
+
+    // Le cerne d'abord : les overlays se dessinent dans l'ordre d'ajout. Il n'est
+    // pas cliquable, sans quoi il capterait les appuis destinés au point.
+    map.overlays.add(
+        SimpleFastPointOverlay(
+            SimplePointTheme(points, false),
+            SimpleFastPointOverlayOptions.getDefaultStyle()
+                .setAlgorithm(SimpleFastPointOverlayOptions.RenderingAlgorithm.MEDIUM_OPTIMIZATION)
+                .setSymbol(forme)
+                .setRadius((rayon + 1.8f) * densite)
+                .setIsClickable(false)
+                .setCellSize((16 * densite).toInt())
+                .setPointStyle(Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = AndroidColor.WHITE
+                    style = Paint.Style.FILL
+                })
+                .setLabelPolicy(SimpleFastPointOverlayOptions.LabelPolicy.ZOOM_THRESHOLD)
+                .setMinZoomShowLabels(99)
+        )
+    )
 
     val style = SimpleFastPointOverlayOptions.getDefaultStyle()
         .setAlgorithm(SimpleFastPointOverlayOptions.RenderingAlgorithm.MEDIUM_OPTIMIZATION)

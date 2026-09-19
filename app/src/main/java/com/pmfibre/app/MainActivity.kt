@@ -93,7 +93,7 @@ import kotlin.math.roundToInt
 // ou sombre et le contraste élevé choisis par l'utilisateur.
 private val BlueDark: Color @Composable get() = MaterialTheme.colorScheme.primaryContainer
 private val BluePrimary: Color @Composable get() = MaterialTheme.colorScheme.primary
-private val GreenOk: Color @Composable get() = LocalCouleursPm.current.exact
+private val CouleurExacte: Color @Composable get() = LocalCouleursPm.current.exact
 private val OrangeWarn: Color @Composable get() = LocalCouleursPm.current.avert
 
 // Au-delà de cette précision GPS (mètres), on avertit l'utilisateur avant d'enregistrer.
@@ -521,7 +521,7 @@ private fun AideContextuelle(tab: Int, onToutVoir: () -> Unit, onDismiss: () -> 
         else -> "Carte" to
             "Seuls les PM de la zone affichée sont dessinés : déplace ou zoome pour en " +
             "voir d'autres.\n\n" +
-            "Rond vert = position relevée sur place. Carré rouge = centre de zone ARCEP, " +
+            "Rond cyan = position relevée sur place. Carré rouge = centre de zone ARCEP, " +
             "donc à préciser. Un chiffre = plusieurs PM au même endroit (un shelter).\n\n" +
             "Le bouton en haut bascule entre le plan et la vue aérienne."
     }
@@ -772,13 +772,13 @@ fun ServingPmCard(serving: ServingPm?, onSelect: (Pm) -> Unit) {
         onClick = { serving?.let { onSelect(it.pm) } },
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = if (serving != null) GreenOk.copy(alpha = 0.12f) else Color.LightGray.copy(alpha = 0.25f)
+            containerColor = if (serving != null) CouleurExacte.copy(alpha = 0.12f) else Color.LightGray.copy(alpha = 0.25f)
         )
     ) {
         Column(Modifier.padding(12.dp)) {
             Text(
                 "Probable PM de cette zone (ARCEP)",
-                fontWeight = FontWeight.Bold, fontSize = 13.sp, color = GreenOk
+                fontWeight = FontWeight.Bold, fontSize = 13.sp, color = CouleurExacte
             )
             if (serving != null) {
                 val label = if (serving.insideZone) "dessert cet endroit"
@@ -1231,7 +1231,7 @@ fun PmDetailScreen(pm: Pm, onBack: () -> Unit) {
                 if (d.positionStatus == "exacte") {
                     Spacer(Modifier.height(16.dp))
                     Text("✔️ Confirmée par ${d.confirmations} personne(s)",
-                        fontSize = 14.sp, fontWeight = FontWeight.Bold, color = GreenOk)
+                        fontSize = 14.sp, fontWeight = FontWeight.Bold, color = CouleurExacte)
                     Spacer(Modifier.height(4.dp))
                     if (d.confirmedByMe) {
                         Text("Tu as confirmé cette position.", fontSize = 12.sp, color = Color.Gray)
@@ -1411,7 +1411,7 @@ fun AddPmScreen(onBack: () -> Unit, onCreated: (Pm) -> Unit) {
             if (lat != null) {
                 Spacer(Modifier.height(4.dp))
                 Text("Position : %.5f, %.5f".format(lat, lon) + (acc?.let { " (±${it.roundToInt()} m)" } ?: ""),
-                    fontSize = 13.sp, color = GreenOk)
+                    fontSize = 13.sp, color = CouleurExacte)
             }
             Spacer(Modifier.height(20.dp))
             Button(
@@ -1425,7 +1425,7 @@ fun AddPmScreen(onBack: () -> Unit, onCreated: (Pm) -> Unit) {
 
 @Composable
 fun PrecisionBadge(view: PmView) {
-    val color = if (view.exact) GreenOk else OrangeWarn
+    val color = if (view.exact) CouleurExacte else OrangeWarn
     val label = if (view.exact) {
         val d = view.savedTs?.let { SimpleDateFormat("dd/MM/yyyy", Locale.FRANCE).format(Date(it)) }
         val who = view.author?.let { " par $it" } ?: ""
@@ -1514,7 +1514,7 @@ fun PmListCard(
             Text(
                 if (exact) "✅" else "≈",
                 fontSize = 18.sp,
-                color = if (exact) GreenOk else OrangeWarn
+                color = if (exact) CouleurExacte else OrangeWarn
             )
         }
     }

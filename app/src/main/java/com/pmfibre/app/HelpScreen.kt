@@ -89,7 +89,7 @@ fun HelpScreen(onBack: () -> Unit) {
                     "publiques. Sert uniquement à s'orienter la première fois — à préciser sur place.\n\n" +
                     "👍  Confirmée par N personne(s) : d'autres utilisateurs ont vérifié la position " +
                     "sur le terrain. Plus il y a de confirmations, plus elle est fiable.\n\n" +
-                    "🔵  Sur la carte : le point bleu, c'est toi.\n\n" +
+                    "🔵  Sur la carte : le gros point bleu cerclé de blanc, c'est toi — les PM sont plus petits et tirent sur le cyan.\n\n" +
                     "🔑  Une indication d'accès existe : comment arriver jusqu'au PM.\n\n" +
                     "🏷️  Étiquettes (🌳 haie · ↩️ impasse · 🔄 par l'arrière · 🚧 portail · " +
                     "🌿 végétation · 🙈 non visible · 🏠 shelter · 🗄️ armoire · 🏢 local · ❔ autre).\n\n" +
