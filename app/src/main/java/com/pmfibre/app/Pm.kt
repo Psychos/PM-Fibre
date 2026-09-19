@@ -18,5 +18,10 @@ data class Pm(
     // Code du département, déduit du paquet dont vient la fiche (« 14 », « 2A »,
     // « 971 ») : il n'est pas dans pm.json, c'est le dossier qui le porte. Sert
     // à borner la synchro au périmètre installé.
-    val depCode: String? = null
+    val depCode: String? = null,
+    // Retiré du référentiel ARCEP : le PM n'est plus dans le paquet du
+    // département, mais l'équipe y a laissé quelque chose — une position
+    // relevée sur place, une étiquette, un accès. Sa fiche est gardée, réduite
+    // à ce que le dernier paquet en disait, et signalée comme telle (§ F12).
+    val retire: Boolean = false
 )

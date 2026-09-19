@@ -255,7 +255,13 @@ object DepStore {
                 ?: throw DepException("Paquet ${info.code} incomplet (pm.json absent).")
             val zones = membres["zones.json"]
 
-            val avant = codesDe(File(cible, "pm.json"))
+            // L'ancien paquet est lu en entier, pas seulement ses codes : c'est
+            // le seul instant où l'on peut garder la fiche d'un PM que le
+            // référentiel retire (§ F12). Dans une minute, le fichier n'existe
+            // plus et un code absent ne dira plus s'il a été retiré ou si le
+            // département n'est pas installé.
+            val ancien = File(cible, "pm.json").let { if (it.isFile) it.readText() else null }
+            val avant = codesDe(ancien)
             temp.mkdirs()
             File(temp, "pm.json").writeBytes(pm)
             File(temp, "zones.json").writeBytes(zones ?: "{}".toByteArray())
@@ -263,10 +269,14 @@ object DepStore {
             cible.deleteRecursively()
             if (!temp.renameTo(cible)) throw DepException("Installation de ${info.code} impossible.")
 
-            val apres = codesDe(File(cible, "pm.json"))
+            val apres = codesDe(File(cible, "pm.json").let { if (it.isFile) it.readText() else null })
+            val retires = if (avant.isEmpty()) emptySet() else avant.filterTo(HashSet()) { it !in apres }
+            if (ancien != null && retires.isNotEmpty()) {
+                PmRepository.conserveRetires(context, fichesDe(ancien, retires, info.code))
+            }
             Diff(
                 ajoutes = if (avant.isEmpty()) 0 else apres.count { it !in avant },
-                retires = if (avant.isEmpty()) 0 else avant.count { it !in apres }
+                retires = retires.size
             )
         } finally {
             archive.delete()
@@ -278,10 +288,10 @@ object DepStore {
     fun decharge(context: Context, code: String): Boolean =
         dossier(context, code).deleteRecursively()
 
-    private fun codesDe(f: File): Set<String> {
-        if (!f.isFile) return emptySet()
+    private fun codesDe(texte: String?): Set<String> {
+        if (texte == null) return emptySet()
         return try {
-            val arr = JSONArray(f.readText())
+            val arr = JSONArray(texte)
             val s = HashSet<String>(arr.length())
             for (i in 0 until arr.length()) {
                 val c = arr.getJSONObject(i).optString("code", "")
@@ -290,6 +300,20 @@ object DepStore {
             s
         } catch (e: Exception) { emptySet() }
     }
+
+    /** Les fiches d'un `pm.json` dont le code est dans `codes` (§ F12). */
+    private fun fichesDe(texte: String, codes: Set<String>, dep: String): List<Pm> = try {
+        val arr = JSONArray(texte)
+        buildList {
+            for (i in 0 until arr.length()) {
+                val o = arr.getJSONObject(i)
+                if (o.optString("code", "") !in codes) continue
+                // Une fiche illisible ne doit pas faire échouer l'installation :
+                // au pire, ce PM-là n'est pas gardé.
+                try { add(pmDepuisJson(o, dep)) } catch (e: Exception) { /* passée */ }
+            }
+        }
+    } catch (e: Exception) { emptyList() }
 
     /** Écrit la réponse dans `dest` et renvoie son sha256 en hexadécimal. */
     private fun telecharge(url: URL, dest: File): String {

@@ -1122,6 +1122,14 @@ fun PmDetailScreen(pm: Pm, onBack: () -> Unit) {
                 .verticalScroll(rememberScrollState()).padding(16.dp)
         ) {
             PrecisionBadge(view)
+            // Deux sources pour le même fait : le paquet installé (le PM a
+            // disparu à la dernière mise à jour) et le serveur (l'import ARCEP
+            // l'a retiré, le paquet du téléphone n'est pas encore à jour). La
+            // première marche hors ligne, la seconde prévient plus tôt (§ F12).
+            if (pm.retire || serverDetail?.retiredAt != null) {
+                Spacer(Modifier.height(8.dp))
+                BandeauRetire(serverDetail?.retiredAt)
+            }
             Spacer(Modifier.height(12.dp))
 
             // En tête de fiche, avant les références : c'est ce qu'on lit en
@@ -1437,6 +1445,32 @@ fun AddPmScreen(onBack: () -> Unit, onCreated: (Pm) -> Unit) {
                 modifier = Modifier.fillMaxWidth()
             ) { Text("Créer le PM") }
         }
+    }
+}
+
+/**
+ * « Retiré du référentiel ARCEP » (§ F12).
+ *
+ * La fiche reste ouverte et complète : ce qui a été relevé sur place a coûté un
+ * déplacement, et un PM sorti du référentiel trimestriel est souvent encore sur
+ * le terrain. Mais il faut le dire, sans quoi le technicien croirait la fiche
+ * courante et s'étonnerait qu'elle ne soit plus dans la recherche de ses
+ * collègues.
+ */
+@Composable
+fun BandeauRetire(dateIso: String?) {
+    val quand = dateIso?.take(10)?.let { iso ->
+        try {
+            val d = SimpleDateFormat("yyyy-MM-dd", Locale.FRANCE).parse(iso)
+            d?.let { " le " + SimpleDateFormat("dd/MM/yyyy", Locale.FRANCE).format(it) }
+        } catch (e: Exception) { null }
+    } ?: ""
+    Surface(color = OrangeWarn, shape = MaterialTheme.shapes.small) {
+        Text(
+            "⚠️ Retiré du référentiel ARCEP$quand — fiche conservée pour vos relevés",
+            color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+        )
     }
 }
 

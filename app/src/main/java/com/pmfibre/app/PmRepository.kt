@@ -78,6 +78,10 @@ object PmRepository {
 
     @Volatile private var basePms: List<Pm> = emptyList()      // ARCEP embarqués
     @Volatile private var addedPms: List<Pm> = emptyList()     // ajoutés par des users
+    // Fiches minimales des PM retirés du référentiel qui portent une
+    // contribution de l'équipe (§ F12). Le paquet ne les contient plus.
+    @Volatile private var retiredPms: List<Pm> = emptyList()
+    @Volatile private var vivants: Set<String> = emptySet()    // codes encore au référentiel
     @Volatile private var pms: List<Pm> = emptyList()          // union (added prime)
     @Volatile private var byCode: Map<String, Pm> = emptyMap()
     @Volatile private var searchIndex: List<Triple<Pm, String, String>> = emptyList()  // pm, code normalisé, commune normalisée
@@ -143,18 +147,31 @@ object PmRepository {
         zoneBBox = zoneRings.mapValues { (_, rings) -> boundingBox(rings) }
 
         addedPms = loadAddedPms(context)
+        retiredPms = loadRetiredPms(context)
         cpMap = loadCpMap(context)
         rebuild()
         loadSaved(context)
+        // Un PM revenu au référentiel n'a plus à être gardé à part : sa vraie
+        // fiche est de retour et prime déjà dans l'index.
+        val revenus = retiredPms.filter { it.code != null && it.code in vivants }
+        if (revenus.isNotEmpty()) {
+            retiredPms = retiredPms - revenus.toSet()
+            persistRetiredPms(context)
+        }
     }
 
     /** Relit les paquets après installation ou déchargement d'un département. */
     fun reload(context: Context) = load(context)
 
     private fun rebuild() {
-        val map = LinkedHashMap<String, Pm>(basePms.size + addedPms.size)
-        for (p in basePms) p.code?.let { map[it] = p }
-        for (p in addedPms) p.code?.let { map[it] = p }   // un PM ajouté prime sur l'ARCEP
+        val map = LinkedHashMap<String, Pm>(basePms.size + addedPms.size + retiredPms.size)
+        // Les retirés d'abord : si le référentiel en rend un, sa vraie fiche
+        // écrase la fiche minimale, qui n'a plus lieu d'être.
+        for (p in retiredPms) p.code?.let { map[it] = p }
+        val encoreLa = HashSet<String>(basePms.size + addedPms.size)
+        for (p in basePms) p.code?.let { map[it] = p; encoreLa.add(it) }
+        for (p in addedPms) p.code?.let { map[it] = p; encoreLa.add(it) }   // un PM ajouté prime sur l'ARCEP
+        vivants = encoreLa
         pms = map.values.toList()
         byCode = map
         searchIndex = pms.map { Triple(it, normalize(it.code ?: ""), normalize(it.com ?: "")) }
@@ -203,17 +220,52 @@ object PmRepository {
 
     private fun persistAddedPms(context: Context) {
         val arr = JSONArray()
-        for (p in addedPms) arr.put(JSONObject().apply {
-            put("code", p.code); put("com", p.com); put("dep", p.dep); put("etat", p.etat)
-            put("date", p.date); put("lat", p.lat); put("lon", p.lon)
-            if (p.lgt != null) put("lgt", p.lgt)
-            if (p.tot != null) put("tot", p.tot)
-            if (p.oi != null) put("oi", p.oi)
-            if (p.op != null) put("op", p.op)
-            if (p.depCode != null) put("dep_code", p.depCode)
-            put("user", 1)
-        })
+        for (p in addedPms) arr.put(p.copy(userAdded = true).enJson())
         Fichiers.ecrit(context.filesDir, "added_pms.json", arr.toString())
+    }
+
+    // ---- PM retirés du référentiel (§ F12) ----
+
+    /**
+     * Garde une fiche minimale des PM que la mise à jour d'un paquet vient de
+     * retirer, quand l'équipe y a laissé quelque chose.
+     *
+     * Appelée par `DepStore` au seul moment où l'on peut faire la différence
+     * entre « retiré du référentiel » et « département non installé » : celui
+     * où l'on tient encore l'ancien paquet et déjà le nouveau. Après coup, un
+     * code absent ne dit plus lequel des deux.
+     *
+     * Sans cela, la position relevée sur place restait dans
+     * `saved_positions.json` sans qu'aucune fiche ne permette d'y accéder : le
+     * relevé existait, et personne ne pouvait plus le retrouver.
+     */
+    fun conserveRetires(context: Context, anciennes: List<Pm>) {
+        val avecContribution = anciennes.mapNotNull { it.code }
+            .filter { code ->
+                saved.containsKey(code) || !MetaStore.meta(code).vide ||
+                    PhotoStore.enAttentePour(context, code).isNotEmpty()
+            }.toSet()
+        val gardees = fichesRetireesAConserver(anciennes, avecContribution)
+        if (gardees.isEmpty()) return
+        val codes = gardees.mapNotNull { it.code }.toSet()
+        retiredPms = retiredPms.filterNot { it.code in codes } + gardees
+        persistRetiredPms(context)
+        rebuild()
+    }
+
+    private fun loadRetiredPms(context: Context): List<Pm> {
+        var lus: List<Pm> = emptyList()
+        // Ce fichier-là n'a aucune copie ailleurs : le serveur ne sait pas
+        // quelles fiches ce téléphone a gardées, et le paquet ne les contient
+        // plus. Fichiers lui donne l'écriture atomique et la copie de secours.
+        Fichiers.lit(context.filesDir, "retired_pms.json") { texte -> lus = parse(texte) }
+        return lus
+    }
+
+    private fun persistRetiredPms(context: Context) {
+        val arr = JSONArray()
+        for (p in retiredPms) arr.put(p.copy(retire = true).enJson())
+        Fichiers.ecrit(context.filesDir, "retired_pms.json", arr.toString())
     }
 
     // ---- Positions exactes enregistrées ----
@@ -439,27 +491,7 @@ object PmRepository {
     private fun parse(text: String, depCode: String? = null): List<Pm> {
         val arr = JSONArray(text)
         val list = ArrayList<Pm>(arr.length())
-        for (i in 0 until arr.length()) {
-            val o = arr.getJSONObject(i)
-            list.add(
-                Pm(
-                    code = o.optString("code", "").ifEmpty { null },
-                    oi = o.optString("oi", "").ifEmpty { null },
-                    com = o.optString("com", "").ifEmpty { null },
-                    dep = o.optString("dep", "").ifEmpty { null },
-                    etat = o.optString("etat", "").ifEmpty { null },
-                    date = o.optString("date", "").ifEmpty { null },
-                    lgt = if (o.isNull("lgt")) null else o.optInt("lgt"),
-                    tot = if (o.isNull("tot")) null else o.optInt("tot"),
-                    lat = o.getDouble("lat"),
-                    lon = o.getDouble("lon"),
-                    precise = o.optInt("p", 0) == 1,
-                    op = o.optString("op", "").ifEmpty { null },
-                    userAdded = o.optInt("user", 0) == 1,
-                    depCode = depCode ?: o.optString("dep_code", "").ifEmpty { null }
-                )
-            )
-        }
+        for (i in 0 until arr.length()) list.add(pmDepuisJson(arr.getJSONObject(i), depCode))
         return list
     }
 
@@ -594,6 +626,56 @@ object PmRepository {
         return best
     }
 }
+
+// ---- Format d'une fiche gardée en local (PM ajoutés, PM retirés) ----
+//
+// Hors de l'objet, et donc sans `Context` : ces deux fonctions se relisent et
+// s'éprouvent sur la JVM. Elles lisent aussi bien un `pm.json` de paquet qu'un
+// fichier écrit par l'application — d'où les clés facultatives.
+
+fun pmDepuisJson(o: JSONObject, depCode: String? = null): Pm = Pm(
+    code = o.optString("code", "").ifEmpty { null },
+    oi = o.optString("oi", "").ifEmpty { null },
+    com = o.optString("com", "").ifEmpty { null },
+    dep = o.optString("dep", "").ifEmpty { null },
+    etat = o.optString("etat", "").ifEmpty { null },
+    date = o.optString("date", "").ifEmpty { null },
+    lgt = if (o.isNull("lgt")) null else o.optInt("lgt"),
+    tot = if (o.isNull("tot")) null else o.optInt("tot"),
+    lat = o.getDouble("lat"),
+    lon = o.getDouble("lon"),
+    precise = o.optInt("p", 0) == 1,
+    op = o.optString("op", "").ifEmpty { null },
+    userAdded = o.optInt("user", 0) == 1,
+    depCode = depCode ?: o.optString("dep_code", "").ifEmpty { null },
+    retire = o.optInt("retire", 0) == 1
+)
+
+fun Pm.enJson(): JSONObject = JSONObject().apply {
+    put("code", code); put("com", com); put("dep", dep); put("etat", etat)
+    put("date", date); put("lat", lat); put("lon", lon)
+    if (lgt != null) put("lgt", lgt)
+    if (tot != null) put("tot", tot)
+    if (oi != null) put("oi", oi)
+    if (op != null) put("op", op)
+    if (depCode != null) put("dep_code", depCode)
+    if (precise) put("p", 1)
+    if (userAdded) put("user", 1)
+    if (retire) put("retire", 1)
+}
+
+/**
+ * Parmi les fiches que le référentiel vient de retirer, celles qu'on garde.
+ *
+ * Une fiche retirée qui ne porte rien n'intéresse personne : le PM n'existe
+ * plus, la garder encombrerait la recherche et la carte. Une fiche qui porte
+ * une position relevée sur place, une étiquette ou un accès est un travail de
+ * terrain — et le fichier des positions le gardait déjà, sans que la fiche
+ * correspondante soit encore trouvable (§ F12).
+ */
+fun fichesRetireesAConserver(anciennes: List<Pm>, avecContribution: Set<String>): List<Pm> =
+    anciennes.filter { it.code != null && it.code in avecContribution }
+        .map { it.copy(retire = true) }
 
 /** Résultat de `PmRepository.pmServing` : le PM dont la zone ARCEP couvre (ou avoisine) le point. */
 data class ServingPm(val pm: Pm, val insideZone: Boolean, val distanceM: Double)

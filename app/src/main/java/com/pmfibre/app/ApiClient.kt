@@ -64,6 +64,11 @@ object ApiClient {
         val author: String?, val updatedAt: String?,
         val confirmations: Int, val confirmedByMe: Boolean,
         val address: String?,
+        // Date de retrait du referentiel ARCEP, si le PM n'y est plus (F12) :
+        // la base le sait depuis l'import versionne, et la fiche le dit
+        // desormais -- l'app garde la position relevee sur place, elle doit
+        // pouvoir signaler que le PM ne fait plus partie du referentiel.
+        val retiredAt: String? = null,
         // Etiquettes, acces et photos viennent avec la fiche : ils sont
         // affiches des l'ouverture, en tete, et trois appels de plus pour un
         // ecran qui s'ouvre en tournee ne se justifiaient pas (roadmap 3.7).
@@ -303,6 +308,7 @@ object ApiClient {
             confirmations = o.optInt("confirmations", 0),
             confirmedByMe = o.optBoolean("confirmed_by_me", false),
             address = optStr(o, "address"),
+            retiredAt = optStr(o, "retired_at"),
             tags = o.optJSONArray("tags")?.let { a ->
                 buildList { for (i in 0 until a.length()) add(a.getString(i)) }
             } ?: emptyList(),
