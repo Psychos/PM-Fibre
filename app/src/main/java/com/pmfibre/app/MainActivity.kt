@@ -884,6 +884,7 @@ fun PmDetailScreen(pm: Pm, onBack: () -> Unit) {
     var serverDetail by remember { mutableStateOf<ApiClient.PmDetail?>(null) }
     var confirming by remember { mutableStateOf(false) }
     var confirmErase by remember { mutableStateOf(false) }
+    var capturePrecise by remember { mutableStateOf(false) }
     val address by rememberAddress(view.lat, view.lon)
 
     fun deleteComment(c: ApiClient.Comment) {
@@ -915,7 +916,8 @@ fun PmDetailScreen(pm: Pm, onBack: () -> Unit) {
 
     // Enregistre la position : serveur d'abord (règle des 10 m appliquée côté serveur),
     // puis local. Si le serveur refuse (< 10 m), on n'écrase pas. Si hors-ligne, on garde en local.
-    fun applyPosition(lat: Double, lon: Double, accuracy: Double?, note: String?, manual: Boolean = false) {
+    fun applyPosition(lat: Double, lon: Double, accuracy: Double?, note: String?,
+                      manual: Boolean = false, methode: String? = null) {
         val code = pm.code ?: return
         val token = SessionStore.token
         scope.launch {
@@ -924,7 +926,7 @@ fun PmDetailScreen(pm: Pm, onBack: () -> Unit) {
                 refresh(); return@launch
             }
             try {
-                ApiClient.putPosition(token, code, lat, lon, accuracy, manual)
+                ApiClient.putPosition(token, code, lat, lon, accuracy, manual, methode)
                 PmRepository.saveExact(context, code, lat, lon, note, SessionStore.username, accuracy, synced = true)
                 refresh()
                 Toast.makeText(context, "Géoloc précise enregistrée ✅", Toast.LENGTH_SHORT).show()
@@ -1004,6 +1006,27 @@ fun PmDetailScreen(pm: Pm, onBack: () -> Unit) {
         ) == PackageManager.PERMISSION_GRANTED
         if (granted) captureCurrent()
         else permissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+    }
+
+    fun onPreciseClick() {
+        val granted = ContextCompat.checkSelfPermission(
+            context, Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+        if (granted) capturePrecise = true
+        else permissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+    }
+
+    if (capturePrecise) {
+        CapturePreciseDialog(
+            onValider = { lat, lon, acc ->
+                capturePrecise = false
+                // Pas d'avertissement « GPS imprécis » ici : la jauge l'a montré
+                // pendant trente secondes, et la précision retenue est la médiane,
+                // déjà moins flatteuse que le meilleur fix.
+                applyPosition(lat, lon, acc, view.note, methode = "gps_precis")
+            },
+            onAnnuler = { capturePrecise = false }
+        )
     }
 
     if (showManual) {
@@ -1141,6 +1164,15 @@ fun PmDetailScreen(pm: Pm, onBack: () -> Unit) {
                     else "📍 Enregistrer la position exacte (ici)"
                 )
             }
+
+            // Deux boutons explicites, pas un appui long : le choix entre « vite » et
+            // « bien » est délibéré, et celui qui a trente secondes doit le voir.
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(
+                onClick = { onPreciseClick() },
+                enabled = !capturing && !capturePrecise && pm.code != null,
+                modifier = Modifier.fillMaxWidth()
+            ) { Text("🎯 Capture précise (" + CAPTURE_PRECISE_S + " s, immobile)") }
 
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

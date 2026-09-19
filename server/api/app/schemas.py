@@ -117,6 +117,11 @@ class PositionIn(BaseModel):
     lon: float = Field(ge=-180, le=180)
     accuracy_m: float | None = Field(default=None, ge=0)
     manual: bool = False   # saisie manuelle -> contrôle de zone plus strict
+    # Comment la position a été obtenue. Facultatif : les clients antérieurs à
+    # la capture précise ne l'envoient pas, et une valeur inconnue est ignorée
+    # plutôt que refusée — un champ déclaratif ne doit pas faire perdre une
+    # position relevée sur le terrain.
+    method: str | None = Field(default=None, max_length=16)
 
 
 class CreatePmRequest(BaseModel):

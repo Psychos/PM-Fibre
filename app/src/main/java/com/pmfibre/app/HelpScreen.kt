@@ -124,6 +124,12 @@ fun HelpScreen(onBack: () -> Unit) {
                     "• 📍 Enregistrer la position exacte : à faire DEVANT le PM ; ta position GPS " +
                     "devient la référence partagée. Si le GPS est imprécis (>15 m), l'app te " +
                     "prévient (PM en sous-sol, etc.).\n" +
+                    "• 🎯 Capture précise (30 s) : reste immobile, téléphone à hauteur de " +
+                    "poitrine et dégagé de l'armoire. L'app garde une trentaine de mesures, " +
+                    "écarte les aberrantes et retient la médiane : nettement plus fiable qu'un " +
+                    "relevé instantané. La jauge passe au vert sous 8 m ; « Valider maintenant » " +
+                    "coupe court si tu es pressé, et un avertissement apparaît si tu bouges " +
+                    "pendant la mesure.\n" +
                     "• ✏️ Saisir / note : coordonnées manuelles ou note libre.\n" +
                     "• 👍 Je confirme : tu es devant le PM et la position est bonne ? Confirme-la.\n" +
                     "• 💬 Commentaires : infos utiles aux collègues (accès, emplacement précis, " +

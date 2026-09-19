@@ -141,11 +141,18 @@ object ApiClient {
     }
 
     /** Publie/actualise la position exacte d'un PM. `manual` = saisie clavier (contrôle de zone strict). */
+    /**
+     * `method` décrit COMMENT la position a été obtenue (`gps_precis` pour une
+     * capture moyennée sur trente secondes, `null` pour un fix unique). Le champ
+     * est facultatif côté serveur : une version de l'app plus ancienne, ou un
+     * serveur pas encore à jour, continuent de fonctionner sans lui.
+     */
     suspend fun putPosition(token: String, code: String, lat: Double, lon: Double, accuracyM: Double?,
-                            manual: Boolean = false):
+                            manual: Boolean = false, method: String? = null):
         ServerPosition = withContext(Dispatchers.IO) {
         val body = JSONObject().put("lat", lat).put("lon", lon).put("manual", manual)
         if (accuracyM != null) body.put("accuracy_m", accuracyM)
+        if (method != null) body.put("method", method)
         val o = requestJson("PUT", "/pm/${enc(code)}/position", body, token)
         ServerPosition(
             o.getDouble("lat"), o.getDouble("lon"),

@@ -33,6 +33,10 @@ app = FastAPI(title="PM Fibre API", version="1.0.0")
 # accepter une modification. En-dessous = considéré identique, refusé.
 MIN_MOVE_METERS = 10.0
 
+# Méthodes de relevé acceptées d'un client. « osm » n'y figure pas : elle est posée
+# par l'import et ne peut pas être revendiquée par une saisie de terrain.
+METHODES_CONNUES = {"gps_precis"}
+
 
 def _haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     r = 6_371_000.0
@@ -384,9 +388,12 @@ def set_position(code: str, body: schemas.PositionIn,
         db.add(pos)
     pos.lat, pos.lon, pos.accuracy_m = body.lat, body.lon, body.accuracy_m
     pos.author = user.username
-    # NULL = capture de terrain. Surtout : écrase un éventuel « osm », qu'une
-    # position relevée sur place ne doit plus revendiquer (§ 4.4).
-    pos.method = "manuelle" if body.manual else None
+    # NULL = capture de terrain à fix unique. Surtout : écrase un éventuel « osm »,
+    # qu'une position relevée sur place ne doit plus revendiquer (§ 4.4).
+    # La liste blanche empêche un client de teinter l'historique avec une valeur
+    # arbitraire ; une valeur inconnue retombe sur NULL, sans refuser la position.
+    pos.method = "manuelle" if body.manual else (
+        body.method if body.method in METHODES_CONNUES else None)
     db.add(PmPositionHistory(pm_code=code, lat=body.lat, lon=body.lon,
                              accuracy_m=body.accuracy_m,
                              method=pos.method, author=user.username))

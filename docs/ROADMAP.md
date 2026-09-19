@@ -595,7 +595,21 @@ composé, sa liste et son défilement sont intacts. Idem pour `AddPmScreen`,
    à chaque déplacement, le cache ne servirait à rien et afficherait un glissement
    de retard.
 9. Terrain : photos, indication d'accès en tête de fiche avec cache hors ligne,
-   étiquettes, deux modes de capture GPS *(§ 3.5, § 3.6, § 3.7)*
+   étiquettes, deux modes de capture GPS *(§ 3.5, § 3.6, § 3.7)* — *capture GPS
+   faite ; photos, accès et étiquettes à faire*
+
+   La capture précise est dans `GpsCapture.kt` : trente secondes, cinq premières
+   jetées, seuls les fixes proches de la meilleure précision observée sont retenus,
+   puis **médiane** sur lat/lon et sur la précision. `FLAG_KEEP_SCREEN_ON` pendant
+   la mesure, jauge en direct, avertissement de dérive, « Valider maintenant »
+   toujours disponible, arrêt anticipé dès que c'est bon et stable.
+
+   Le calcul est isolé dans `GpsFusion`, sans dépendance Android, et couvert par
+   neuf tests JVM : c'est le seul endroit du client qui puisse produire une
+   position fausse *et crédible*. La colonne `method` gelée au point 5 sert enfin
+   (`gps_precis`), avec une liste blanche côté serveur — un client ne teinte pas
+   l'historique avec ce qu'il veut, et une valeur inconnue ne fait pas perdre la
+   position.
 10. Interface : trois onglets, `? ⚙`, aide contextuelle, centralisation des
     couleurs puis thèmes *(§ 3.8)*
 
