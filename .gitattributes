@@ -1,0 +1,13 @@
+# Fins de ligne des fichiers qui partent sur PsyOne (Linux).
+#
+# Le depot est travaille sous Windows avec core.autocrlf=true : sans cette
+# regle, un clone neuf extrait les scripts en CRLF et un `scp` deploie un
+# shebang « #!/usr/bin/env bash\r ». Le noyau cherche alors un interpreteur
+# nomme « bash\r », ne le trouve pas, et le cron de sauvegarde echoue en
+# entier — sans rien dans le journal du script, puisqu'il n'a jamais demarre.
+*.sh   text eol=lf
+*.py   text eol=lf
+*.sql  text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+*.conf text eol=lf
