@@ -731,6 +731,59 @@ pendant que la base est encore jetable.
 
 ---
 
+## 6 bis. Mise en production du 2026-09-19 (v1.2)
+
+Les dix points de la section 5 sont livrés. Tout a été déployé le même jour et
+vérifié depuis l'extérieur, pas seulement depuis le réseau local.
+
+**Nom de version : 1.11 → 1.2, pas 1.12.** La 1.12 n'a jamais été distribuée, et
+le saut de fonctions depuis la 1.11 méritait un numéro qui se voie. Le nom est
+cosmétique : `versionCode` (6) est la seule valeur que l'app et le
+`min_app_version` du manifeste comparent.
+
+**Site.** `~/mapm-site/public/data/` : manifeste + 103 paquets, 8,5 Mo.
+`https://mapm.online/data/manifest.json` répond 200 avec `Cache-Control:
+no-cache` et un ETag, `deps/01.tgz` 200 en `application/gzip` avec
+`max-age=3600`, et le sha256 servi est bien celui du manifeste — c'est-à-dire
+que la vérification que fait `DepStore` avant d'extraire passe pour de vrai.
+Le rechargement de nginx demande `nginx -s reload` : `docker compose up -d` ne
+recrée pas le conteneur quand seul le **contenu** d'un fichier monté a changé,
+si bien que la nouvelle configuration ne serait jamais relue.
+
+**API.** Migration `001_gel_schema.sql` appliquée, puis l'import national a
+tourné tout seul au démarrage : ZAPM 2026T2, 99 451 PM vus, **+91 526 en base**,
+4 retirés, 9957 positions OSM amorcées. La base passe de 7 930 PM sur
+7 départements à la France entière.
+
+Deux écarts ont été trouvés en comparant le compose du dépôt à celui qui
+tournait sur PsyOne, **avant** de déployer — c'est la comparaison qui les a
+révélés, pas un test :
+
+- `MAX_SESSIONS_PER_USER` avait disparu de la liste `environment:`. Le
+  déploiement l'aurait retiré du conteneur et `auth.py` serait retombé sur son
+  défaut de 2 : le troisième appareil d'un utilisateur évince le premier, sans
+  rien signaler. La valeur avait justement été portée à 5.
+- Le montage des paquets pointait vers `../site/public/data`, vrai dans le
+  dépôt, faux en production où le site vit dans `~/mapm-site`. Docker crée un
+  bind absent en **dossier vide** : l'import n'aurait rien trouvé et serait
+  resté silencieux, ce qui est son comportement normal quand il n'y a pas de
+  paquet — le genre de panne qui ne se voit qu'au moment où l'on se demande
+  pourquoi la base n'a pas bougé. Le chemin passe désormais par
+  `PACKAGES_DIR_HOST`, dont le défaut reste celui du dépôt.
+
+**Sauvegardes.** Le volume `pmfibre_photos` est créé et accessible en écriture
+par l'API. Le cron de 4h07 archive désormais les photos, mais seulement quand le
+lot a changé.
+
+**Page du site.** Elle annonçait une « base embarquée hors-ligne » qui n'existe
+plus : depuis la 1.2 l'app démarre vide et télécharge les départements choisis.
+Un visiteur qui installe sans le savoir croit à une application cassée.
+
+Reste, hors production : `cp_normandie.json` toujours normand (recherche par
+code postal limitée à la Normandie), et les noms de départements sans accents.
+
+---
+
 ## 7. Conventions de travail
 
 - Une session de travail **par lot**, pas par fichier : découper plus fin fait
