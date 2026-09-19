@@ -772,6 +772,21 @@ def sync_meta(
 KINDS_PHOTO = {"pm", "acces"}
 
 
+def _est_auteur(ligne, user: User) -> bool:
+    """Vrai si `user` est bien l'auteur de cette contribution (§ F13).
+
+    La comparaison porte sur l'identifiant, jamais sur le prénom : un compte
+    supprimé libère son prénom, et le prochain inscrit à le reprendre héritait
+    sinon du droit de modifier et d'effacer les contributions du précédent.
+
+    `author_user_id` à NULL veut dire que l'auteur n'existe plus — la migration
+    002 a rattaché toutes les contributions des comptes vivants, et celles
+    créées depuis portent l'identifiant. Personne ne peut donc s'en dire
+    l'auteur ; seul un administrateur y touche encore.
+    """
+    return ligne.author_user_id is not None and ligne.author_user_id == user.id
+
+
 def _photo_out(p: PmPhoto) -> schemas.PhotoOut:
     return schemas.PhotoOut(
         id=p.id, code=p.pm_code, kind=p.kind, bytes=p.bytes,
@@ -850,7 +865,8 @@ async def upload_photo(
     nom = photos.enregistre(data, ext)
     larg, haut = photos.dimensions(data)
     photo = PmPhoto(pm_code=code, kind=kind, filename=nom, sha256=sha,
-                    bytes=len(data), width=larg, height=haut, author=user.username)
+                    bytes=len(data), width=larg, height=haut,
+                    author=user.username, author_user_id=user.id)
     db.add(photo)
     db.commit()
     db.refresh(photo)
@@ -882,7 +898,7 @@ def delete_photo(photo_id: int, db: OrmSession = Depends(get_db),
     photo = db.get(PmPhoto, photo_id)
     if photo is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Photo inconnue")
-    if photo.author != user.username and user.role != "admin":
+    if not _est_auteur(photo, user) and user.role != "admin":
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Photo d'un autre utilisateur")
 
     nom, sha, code = photo.filename, photo.sha256, photo.pm_code
@@ -911,7 +927,8 @@ def add_comment(code: str, body: schemas.CommentIn,
                 db: OrmSession = Depends(get_db), user: User = Depends(auth.get_current_user)):
     if db.get(Pm, code) is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "PM inconnu")
-    c = PmComment(pm_code=code, body=body.body, author=user.username)
+    c = PmComment(pm_code=code, body=body.body, author=user.username,
+                  author_user_id=user.id)
     db.add(c)
     db.commit()
     db.refresh(c)
@@ -1003,8 +1020,25 @@ def admin_delete_user(user_id: int, db: OrmSession = Depends(get_db), admin: Use
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Utilisateur inconnu")
     if u.id == admin.id:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Impossible de se supprimer soi-même")
+    # Le sort des contributions d'un compte supprimé (§ F13) : elles restent.
+    # Ce sont des relevés de terrain dont l'équipe se sert, et les effacer
+    # punirait les collègues, pas le compte. Le prénom reste affiché — c'est
+    # bien cette personne qui a écrit — mais le lien vers le compte est coupé :
+    # plus personne ne pourra se dire l'auteur de ces lignes, pas même un
+    # nouvel inscrit qui reprendrait le prénom, ni un compte qui se verrait
+    # réattribuer l'identifiant libéré (MariaDB réutilise un AUTO_INCREMENT
+    # rendu par la dernière ligne après un redémarrage).
+    detaches = (db.query(PmComment).filter(PmComment.author_user_id == u.id)
+                .update({PmComment.author_user_id: None}, synchronize_session=False)
+                + db.query(PmPhoto).filter(PmPhoto.author_user_id == u.id)
+                .update({PmPhoto.author_user_id: None}, synchronize_session=False))
+    nom = u.username
     db.delete(u)
     db.commit()
+    if detaches:
+        logging.getLogger(__name__).info(
+            "suppression de %s : %d contribution(s) conservees et detachees",
+            nom, detaches)
     return schemas.MessageResponse(message="Utilisateur supprimé.")
 
 
@@ -1037,7 +1071,7 @@ def _get_comment_editable(db: OrmSession, comment_id: int, user: User) -> PmComm
     if c is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Commentaire inconnu")
     # Éditable par son auteur OU par un admin.
-    if c.author != user.username and user.role != "admin":
+    if not _est_auteur(c, user) and user.role != "admin":
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Vous ne pouvez modifier que vos propres commentaires")
     return c
 

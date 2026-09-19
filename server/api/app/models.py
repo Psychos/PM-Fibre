@@ -93,6 +93,10 @@ class PmComment(Base):
     pm_code: Mapped[str] = mapped_column(String(64), ForeignKey("pm.code", ondelete="CASCADE"), nullable=False, index=True)
     body: Mapped[str] = mapped_column(Text, nullable=False)
     author: Mapped[str | None] = mapped_column(String(255))
+    # Qui a écrit, par identifiant et non par prénom (§ F13). `author` reste le
+    # libellé affiché ; `author_user_id` seul décide du droit de modifier.
+    # NULL = contribution d'un compte supprimé : plus personne n'en hérite.
+    author_user_id: Mapped[int | None] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
@@ -157,6 +161,7 @@ class PmPhoto(Base):
     width: Mapped[int | None] = mapped_column(Integer)
     height: Mapped[int | None] = mapped_column(Integer)
     author: Mapped[str | None] = mapped_column(String(255))
+    author_user_id: Mapped[int | None] = mapped_column(Integer)   # cf. PmComment (§ F13)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
