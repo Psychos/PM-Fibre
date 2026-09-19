@@ -1,14 +1,18 @@
-# Extrait les polygones ZAPM (zones ARCEP) des PM des 7 departements suivis
-# (5 Normandie + 78 Yvelines + 72 Sarthe), simplifies, pour la validation
-# serveur "position dans la zone". Source : shapefile ARCEP T2 2026 (le plus
-# recent disponible), pas l'ancien T1 2026 utilise par build_zones.py.
+# Extrait les polygones ZAPM (zones ARCEP), simplifies, pour la validation
+# serveur "position dans la zone" et l'onglet "Autour" hors ligne.
+# Source : shapefile ARCEP T2 2026 (voir l'en-tete de build_multi.py pour le
+# lien de telechargement), pas l'ancien T1 2026 utilise par build_zones.py.
+#
+#   python build_zones_multi.py                 # France entiere
+#   python build_zones_multi.py 14,27,50,61,76  # sous-ensemble
+#
 # Sortie : zones_multi.json  { code_pm: [ [ [lat,lon], ... ] (anneaux) ] }
-import json, math, os
+import json, math, os, sys
 import shapefile
 
 SHP = "raw_2026T2/extracted/2026T2_ZAPM"
 OUT = "zones_multi.json"
-DEPS = {"14", "27", "50", "61", "76", "78", "72"}
+DEPS = set(sys.argv[1].split(",")) if len(sys.argv) > 1 else set()  # vide = tous
 TOL = 0.0002  # ~22 m : ample pour valider une saisie manuelle
 
 
@@ -52,7 +56,7 @@ zones = {}
 npts_total = 0
 for sr in r.iterShapeRecords():
     rec = sr.record
-    if (rec[idx["INSEE_DEP"]] or "").strip() not in DEPS:
+    if DEPS and (rec[idx["INSEE_DEP"]] or "").strip() not in DEPS:
         continue
     code = rec[idx["RefPM"]]
     if not code:

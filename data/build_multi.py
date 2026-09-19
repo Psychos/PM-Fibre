@@ -1,6 +1,13 @@
 # -*- coding: utf-8 -*-
 """Filtre le shapefile ARCEP ZAPM (T2 2026, le plus recent disponible) pour
-produire les PM des 7 departements suivis par l'app (5 Normandie + 78 + 72).
+produire les PM, par defaut sur toute la France.
+
+    python build_multi.py                 # France entiere (103 departements)
+    python build_multi.py 14,27,50,61,76  # sous-ensemble
+
+Source brute, non versionnee (~280 Mo extraite), a retelecharger au besoin :
+  https://www.data.gouv.fr/datasets/le-marche-du-haut-et-tres-haut-debit-fixe-deploiements
+  -> ressource "2026T2-Zapm" (zip 74 Mo), a extraire dans raw_2026T2/extracted/
 
 Positions precises : reutilise les positions OSM deja connues dans
 pm_full.json (p=1, issu d'un merge precedent avec PMZ.geojson) par code PM.
@@ -8,18 +15,17 @@ Les sources OSM brutes (PMZ.geojson, KML) ne sont plus disponibles sur ce
 poste ; leurs positions deja fusionnees restent valides (l'emplacement d'un
 PM ne bouge quasiment jamais) et sont donc recyclees ici plutot que perdues.
 """
-import json, os
+import json, os, sys
 from collections import defaultdict
 import shapefile
 
 SHP = "raw_2026T2/extracted/2026T2_ZAPM"
 OUT = "pm_multi.json"
 
-DEPS = {"14", "27", "50", "61", "76", "78", "72"}
-NAMES = {
-    "14": "Calvados", "27": "Eure", "50": "Manche", "61": "Orne",
-    "76": "Seine-Maritime", "78": "Yvelines", "72": "Sarthe",
-}
+# Vide = tous les departements. Le nom affiche vient de NOM_DEP dans la donnee,
+# il n'y a donc pas de table de correspondance a tenir a jour.
+DEPS = set(sys.argv[1].split(",")) if len(sys.argv) > 1 else set()
+NAMES = {}
 
 # 1) Positions OSM connues, recyclees depuis l'ancien merge (pm_full.json, p=1)
 print("Chargement des positions OSM connues (pm_full.json)...")
@@ -34,8 +40,8 @@ print("  Positions OSM recyclees:", len(pos))
 # 2) Correspondance operateurs
 oi_map = json.load(open("oi_map.json", encoding="utf-8"))
 
-# 3) ARCEP ZAPM T2 2026 -> PM des 7 departements
-print("Filtrage des PM (7 departements) dans l'ARCEP T2 2026...")
+# 3) ARCEP ZAPM T2 2026 -> PM des departements retenus
+print("Filtrage des PM dans l'ARCEP T2 2026 (%s)..." % (",".join(sorted(DEPS)) if DEPS else "France entiere"))
 r = shapefile.Reader(SHP)
 fields = [f[0] for f in r.fields[1:]]
 idx = {n: i for i, n in enumerate(fields)}
@@ -52,8 +58,9 @@ out = []
 per_dep = defaultdict(lambda: [0, 0])
 for rec in r.iterRecords():
     dep = (rec[idx["INSEE_DEP"]] or "").strip()
-    if dep not in DEPS:
+    if not dep or (DEPS and dep not in DEPS):
         continue
+    NAMES.setdefault(dep, (rec[idx["NOM_DEP"]] or "").strip() or dep)
     ref = rec[idx["RefPM"]]
     p = pos.get(ref)
     oi = (rec[idx["CodeOI"]] or "").strip()

@@ -17,22 +17,32 @@ une base vivante, à la main, sans filet.
 
 ## 2. Volumétrie mesurée
 
-| | Normandie (actuel) | France entière |
-|---|---|---|
-| PM | 4 930 | **99 268** |
-| Départements | 5 | 103 (DOM/COM compris) |
-| `pm_full.json` | 832 Ko | 16,6 Mo |
-| `zones_*.json` | 1,05 Mo | ~21 Mo (extrapolé) |
+Chiffres **mesurés sur le jeu ARCEP T2 2026** le 19 septembre (la colonne
+« France » était extrapolée dans la version d'origine).
 
-Détail Normandie : Seine-Maritime 1 872 · Calvados 1 080 · Eure 758 · Manche 616 ·
-Orne 604. Positions exactes d'origine OSM (`p=1`) : 325.
+| | Normandie | 7 départements | France entière |
+|---|---|---|---|
+| PM | 4 930 | 7 930 | **99 451** |
+| Départements | 5 | 7 | 103 (DOM/COM compris) |
+| `pm_multi.json` | — | 1,5 Mo | 19,4 Mo |
+| `zones_multi.json` | 1,05 Mo | 1,7 Mo | 20,9 Mo |
+| **Paquets `.tgz`** | — | **664 Ko** | **8,22 Mo** |
 
-**Moyenne par département** : ~960 PM ≈ 160 Ko de PM + 200 Ko de zones, soit
-**~100 Ko gzippés**. Le plus gros département (Nord, 3 545 PM) ≈ 1,3 Mo brut,
-~350 Ko gzippés.
+Détail Normandie : Seine-Maritime 1 873 · Calvados 1 081 · Eure 758 · Manche 616 ·
+Orne 604. Positions exactes d'origine OSM (`p=1`) : 324 en Normandie, 1 321 sur
+les 7 départements, **11 278 sur la France** (11 %).
 
-Conclusion : le découpage par département est très léger. Pas besoin de deltas,
-un paquet complet par département suffit.
+**Moyenne par département** : ~965 PM ≈ **82 Ko gzippés**, l'estimation
+« ~100 Ko » était bonne. Le plus gros, le Nord (3 544 PM), tient en **315 Ko**
+et non 350. Le plus petit, Saint-Barthélemy, en 1,4 Ko.
+
+**Pire cas du plafond de 6 départements** (§ 3.1) : Nord + Gironde +
+Pas-de-Calais + les trois suivants = **1,25 Mo**. Le § 3.1 tablait sur 2,5 Mo de
+PM plus 3 Mo de zones — c'était du brut ; compressé, l'ordre de grandeur est
+cinq fois moindre.
+
+Conclusion inchangée, et renforcée : le découpage par département est très
+léger. Pas besoin de deltas, un paquet complet par département suffit.
 
 ---
 
@@ -374,8 +384,8 @@ composé, sa liste et son défilement sont intacts. Idem pour `AddPmScreen`,
 > État vérifié sur le disque le 19 septembre 2026. Le document d'origine a été
 > écrit en lisant GitHub, qui ignorait deux scripts restés non suivis.
 
-1. **`dep_code` partout, paquets par département, manifeste** — *fait pour les
-   7 départements extraits ; reste l'élargissement à la France*
+1. **`dep_code` partout, paquets par département, manifeste** — *fait,
+   France entière*
 
    Déjà en place :
 
@@ -395,7 +405,8 @@ composé, sa liste et son défilement sont intacts. Idem pour `AddPmScreen`,
      `site/public/data/deps/<code>.tgz` (`pm.json` + `zones.json`) plus
      `site/public/data/manifest.json` au format du § 3.2. 7 930 PM, 664 Ko au
      total, de 53 Ko (Orne) à 178 Ko (Yvelines) — conforme à l'estimation
-     « ~100 Ko gzippés par département » du § 2.
+     « ~100 Ko gzippés par département » du § 2. Étendu le 19 septembre aux
+     **103 départements** : 99 451 PM, 8,22 Mo au total.
    - **Archives déterministes** : `mtime`, `uid`/`gid` et ordre des entrées
      figés, gzip sans horodatage. Un contenu inchangé redonne le même `sha256`,
      sinon le manifeste annoncerait une mise à jour à chaque régénération.
@@ -416,18 +427,12 @@ composé, sa liste et son défilement sont intacts. Idem pour `AddPmScreen`,
 
    Reste à faire :
 
-   - **Portée : 7 départements, pas 103.** `build_packages.py` est lui-même
-     agnostique — il regroupe sur le `dep_code` qu'il trouve, et `joli_nom()`
-     met en forme n'importe quel nom de département sans table à tenir. Le
-     plafond vient de l'**extraction** : `DEPS` est une constante recopiée dans
-     `build_multi.py` et `build_zones_multi.py`, et l'élargir suppose de
-     retélécharger le shapefile ARCEP T2 2026.
-     Option intermédiaire si l'on veut la France sans attendre : `pm_full.json`
-     couvre déjà les 99 268 PM et le § 4.6 rappelle que le code ARCEP porte le
-     code commune (`FI-91477-000Y` → 91477 → 91), donc `dep_code` est
-     déductible. Mais il n'existe **aucune zone ZAPM** hors des 7 départements :
-     les paquets ainsi produits casseraient l'onglet « Autour » et la
-     validation `geo.py`. À trancher, ce n'est pas un détail d'implémentation.
+   - **Reste : les noms de départements sont sans accents** (« Cotes-d'Armor »,
+     « La Reunion », « Puy-de-Dome »), parce que `NOM_DEP` l'est dans la source
+     ARCEP. `joli_nom()` gère la casse et les particules sans table, mais les
+     accents en exigeraient une, de 103 entrées. Sans conséquence tant que le
+     nom n'est pas affiché — donc à trancher au point 6, avec l'écran des
+     départements.
    - **`min_app_version` vaut 6**, soit le `versionCode` actuel (5) plus un :
      aucune version publiée ne sait lire ces paquets. À rectifier si l'APK qui
      les consommera porte un autre numéro.
@@ -451,12 +456,21 @@ composé, sa liste et son défilement sont intacts. Idem pour `AddPmScreen`,
    - **Divergence de schéma à trancher.** `pm_full.json` marque les positions
      OSM exactes par `p: 1`, `pm_multi.json` par `src: "osm"`. Un seul des deux
      doit survivre avant que l'app ne lise les paquets.
-   - **Le shapefile source est absent du disque** : `data/raw_2026T2/` n'existe
-     plus, et le scratchpad `E--PM` que cite le `CLAUDE.md` a été purgé. Les
-     deux scripts ne sont pas rejouables sans retélécharger l'ARCEP T2 2026 —
-     raison de plus pour versionner leurs sorties. Corollaire : la mise en
-     paquets doit partir de `pm_multi.json` et `zones_multi.json`, pas du
-     shapefile.
+   - **Le shapefile source a été retéléchargé le 19 septembre** (il avait
+     disparu du disque, avec le scratchpad que cite le `CLAUDE.md`) :
+     ressource « 2026T2-Zapm », zip de 74 Mo, sur la page data.gouv
+     « Le marché du haut et très haut débit fixe (déploiements) ». Le lien est
+     désormais dans l'en-tête de `build_multi.py`, et `data/raw_*/` est ignoré
+     par git — 280 Mo une fois extrait.
+     **La chaîne est reproductible** : rejoué sur les 7 départements,
+     `build_multi.py` a régénéré `pm_multi.json` octet pour octet. C'est ce qui
+     a permis d'élargir à la France sans rien prendre au hasard.
+   - Ordre de reconstruction complet, depuis un dépôt propre :
+     ```
+     # extraire 2026t2-zapm.zip dans data/raw_2026T2/extracted/
+     cd data && python build_multi.py && python build_zones_multi.py
+     python build_packages.py
+     ```
    - Écart T1 → T2 déjà mesurable : 8 PM apparus, 5 retirés sur les 7
      départements. De quoi éprouver le rapport de mise à jour du § 3.4.
 

@@ -57,18 +57,16 @@ def joli_nom(nom_majuscules: str) -> str:
     if not nom_majuscules:
         return ""
     out = []
-    mot_debut = True
+    premier = True  # seul le tout premier mot echappe a la regle des particules
     for morceau in _split_garde_separateurs(nom_majuscules.lower()):
         if morceau in ("-", " ", "'"):
             out.append(morceau)
-            # Une apostrophe ne demarre pas un nouveau mot ("d'Armor").
-            mot_debut = morceau != "'"
             continue
-        if not mot_debut and morceau in _PARTICULES:
-            out.append(morceau)
+        if not premier and morceau in _PARTICULES:
+            out.append(morceau)          # Hauts-de-Seine, Val-d'Oise, Lot-et-Garonne
         else:
             out.append(morceau.capitalize())
-        mot_debut = False
+        premier = False
     return "".join(out)
 
 

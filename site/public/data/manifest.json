@@ -1,9 +1,139 @@
 {
   "dataset": "ZAPM 2026T2",
-  "generated": "2026-09-19T08:13:01Z",
+  "generated": "2026-09-19T08:20:53Z",
   "max_deps": 6,
   "min_app_version": 6,
   "deps": [
+    {
+      "code": "01",
+      "nom": "Ain",
+      "pm": 1162,
+      "exact": 24,
+      "zones": 1162,
+      "size": 98715,
+      "sha256": "3a46b00bee0982da540b4bd59b5011b40269781d37fe5def931d453e58b73daa",
+      "url": "deps/01.tgz"
+    },
+    {
+      "code": "02",
+      "nom": "Aisne",
+      "pm": 754,
+      "exact": 0,
+      "zones": 754,
+      "size": 71944,
+      "sha256": "8804ef8f5e05130a0c5706d1facdb76f07b87e03735516c107af5e092bd5eb0f",
+      "url": "deps/02.tgz"
+    },
+    {
+      "code": "03",
+      "nom": "Allier",
+      "pm": 651,
+      "exact": 62,
+      "zones": 651,
+      "size": 56978,
+      "sha256": "f80f52db50cc68d4b9bce12f8f4f9841a0fedae85094b5da31c8b37d7f986e4b",
+      "url": "deps/03.tgz"
+    },
+    {
+      "code": "04",
+      "nom": "Alpes-de-Haute-Provence",
+      "pm": 397,
+      "exact": 15,
+      "zones": 397,
+      "size": 36391,
+      "sha256": "a7ffebcf8c7b12a9fbf31086184e7127beb3bb056374e8deb79329df0c273943",
+      "url": "deps/04.tgz"
+    },
+    {
+      "code": "05",
+      "nom": "Hautes-Alpes",
+      "pm": 419,
+      "exact": 14,
+      "zones": 419,
+      "size": 36224,
+      "sha256": "1a67e0bb5feb7b75d3b4b4ea53f40da802448ec08c153ad9f217be3f52a18fc2",
+      "url": "deps/05.tgz"
+    },
+    {
+      "code": "06",
+      "nom": "Alpes-Maritimes",
+      "pm": 1717,
+      "exact": 23,
+      "zones": 1717,
+      "size": 147895,
+      "sha256": "e7d0a3301a1b8802cddb63171dba6ce46974c3663b0b6391f63838d8ab07b921",
+      "url": "deps/06.tgz"
+    },
+    {
+      "code": "07",
+      "nom": "Ardeche",
+      "pm": 636,
+      "exact": 8,
+      "zones": 636,
+      "size": 58595,
+      "sha256": "0566cf8cbd8a99b9e8a3f1e21596e91056b4ce8e47fe5fa5a4022a84a7955de1",
+      "url": "deps/07.tgz"
+    },
+    {
+      "code": "08",
+      "nom": "Ardennes",
+      "pm": 388,
+      "exact": 10,
+      "zones": 388,
+      "size": 35497,
+      "sha256": "186eb1fd137a099f78aa6e2dcfc848c44fa0a41e4c9d08eef2093dc232c94b94",
+      "url": "deps/08.tgz"
+    },
+    {
+      "code": "09",
+      "nom": "Ariege",
+      "pm": 345,
+      "exact": 26,
+      "zones": 345,
+      "size": 31843,
+      "sha256": "13509ea5b8b337fa71850f5a21b3d8bd884118492bafaffa32f6b410fbec26d4",
+      "url": "deps/09.tgz"
+    },
+    {
+      "code": "10",
+      "nom": "Aube",
+      "pm": 466,
+      "exact": 85,
+      "zones": 466,
+      "size": 42532,
+      "sha256": "7931339e4c0f7a4b59b91690ec95b16029aaa569c7a7e2cd7d40009f66bea6aa",
+      "url": "deps/10.tgz"
+    },
+    {
+      "code": "11",
+      "nom": "Aude",
+      "pm": 773,
+      "exact": 14,
+      "zones": 773,
+      "size": 69407,
+      "sha256": "d0855c0a5118e6abb965fa7688e07e6d7a50dc77e4b58a4b9e8788900864c385",
+      "url": "deps/11.tgz"
+    },
+    {
+      "code": "12",
+      "nom": "Aveyron",
+      "pm": 822,
+      "exact": 56,
+      "zones": 822,
+      "size": 74452,
+      "sha256": "d7e2e14bb16f8c8695fe557e2e4d8154a41b599b1442ce0af8010f59efbcd782",
+      "url": "deps/12.tgz"
+    },
+    {
+      "code": "13",
+      "nom": "Bouches-du-Rhone",
+      "pm": 2396,
+      "exact": 70,
+      "zones": 2396,
+      "size": 191101,
+      "sha256": "217c69de324c8f4a042171bcce29ad3fba901dd92b7c364a1c21d27dd2aef957",
+      "url": "deps/13.tgz"
+    },
     {
       "code": "14",
       "nom": "Calvados",
@@ -13,6 +143,116 @@
       "size": 91885,
       "sha256": "a289eea8a14499d3efaee7ea30e232c95ad2d21d538523f38af3b115909cbf03",
       "url": "deps/14.tgz"
+    },
+    {
+      "code": "15",
+      "nom": "Cantal",
+      "pm": 329,
+      "exact": 7,
+      "zones": 329,
+      "size": 32086,
+      "sha256": "3ab11c1b495d8bcc7bb9f4dbec725f05af49b15bf444154dfaf1d8e5717e9035",
+      "url": "deps/15.tgz"
+    },
+    {
+      "code": "16",
+      "nom": "Charente",
+      "pm": 612,
+      "exact": 4,
+      "zones": 612,
+      "size": 55210,
+      "sha256": "7be4c1304f5981c3249bcdf47ead490c97b3333e68010b0b5894b98012d44fc1",
+      "url": "deps/16.tgz"
+    },
+    {
+      "code": "17",
+      "nom": "Charente-Maritime",
+      "pm": 1388,
+      "exact": 150,
+      "zones": 1388,
+      "size": 118721,
+      "sha256": "2cb5bc9f98e239d6059e39afa2977ef58f70596810a4f2dfe50e3e504c6a63fa",
+      "url": "deps/17.tgz"
+    },
+    {
+      "code": "18",
+      "nom": "Cher",
+      "pm": 490,
+      "exact": 287,
+      "zones": 490,
+      "size": 45354,
+      "sha256": "bf188bfa6fc4b8ba37ebee1979a5dded9c21285e1c1e79e99881b3714eba688e",
+      "url": "deps/18.tgz"
+    },
+    {
+      "code": "19",
+      "nom": "Correze",
+      "pm": 461,
+      "exact": 67,
+      "zones": 461,
+      "size": 44802,
+      "sha256": "918379c6bf66ac7bf526190b66970230a25c2f2f7912fdd9a41f47bc9c558b58",
+      "url": "deps/19.tgz"
+    },
+    {
+      "code": "21",
+      "nom": "Cote-d'Or",
+      "pm": 933,
+      "exact": 65,
+      "zones": 933,
+      "size": 81816,
+      "sha256": "48375cdea2cc94432d524004ddf22714120b189dbf4ce62e33ee8d8bd5952ddf",
+      "url": "deps/21.tgz"
+    },
+    {
+      "code": "22",
+      "nom": "Cotes-d'Armor",
+      "pm": 1171,
+      "exact": 215,
+      "zones": 1171,
+      "size": 99216,
+      "sha256": "4eecfecd00c4afc1361e7fa55cb8545802cb2d8a414419f1c2d11f9db6a2fccb",
+      "url": "deps/22.tgz"
+    },
+    {
+      "code": "23",
+      "nom": "Creuse",
+      "pm": 263,
+      "exact": 0,
+      "zones": 263,
+      "size": 26673,
+      "sha256": "10cbcb5cd9b718fe8bff0742dd440fd1ea63b2505972c2ddf00453819030459f",
+      "url": "deps/23.tgz"
+    },
+    {
+      "code": "24",
+      "nom": "Dordogne",
+      "pm": 756,
+      "exact": 680,
+      "zones": 756,
+      "size": 72746,
+      "sha256": "d3aaebd1eaf1ab11fdf164cf48828b0452f7369a90330039cf8e733e4ec0662f",
+      "url": "deps/24.tgz"
+    },
+    {
+      "code": "25",
+      "nom": "Doubs",
+      "pm": 781,
+      "exact": 507,
+      "zones": 781,
+      "size": 70868,
+      "sha256": "9ac70928c2e537a0a08602dd5961d852daabc8144654fca8bfd79e83ed2e8c4a",
+      "url": "deps/25.tgz"
+    },
+    {
+      "code": "26",
+      "nom": "Drome",
+      "pm": 904,
+      "exact": 32,
+      "zones": 904,
+      "size": 80750,
+      "sha256": "1864725c73d8f71961b3fbc03bef63fe8d0b526fb5735cd48b7ac2f5a172636d",
+      "url": "deps/26.tgz"
     },
     {
       "code": "27",
@@ -25,6 +265,246 @@
       "url": "deps/27.tgz"
     },
     {
+      "code": "28",
+      "nom": "Eure-et-Loir",
+      "pm": 710,
+      "exact": 49,
+      "zones": 710,
+      "size": 62460,
+      "sha256": "db0c918670bebf0e8fa74e3e5f2d65c38dc0ff84cfac980642434fce65f4efbf",
+      "url": "deps/28.tgz"
+    },
+    {
+      "code": "29",
+      "nom": "Finistere",
+      "pm": 1702,
+      "exact": 734,
+      "zones": 1702,
+      "size": 142256,
+      "sha256": "1167bb7c825a66f93f5feb4dfb15bf7dcb6b69dc8d6c6eb9be8812a4e33e6539",
+      "url": "deps/29.tgz"
+    },
+    {
+      "code": "2A",
+      "nom": "Corse-du-Sud",
+      "pm": 416,
+      "exact": 39,
+      "zones": 416,
+      "size": 36118,
+      "sha256": "358ec05f0f3162d5fec524cb75794564c4277caec40c0715bc5fff471b511215",
+      "url": "deps/2A.tgz"
+    },
+    {
+      "code": "2B",
+      "nom": "Haute-Corse",
+      "pm": 446,
+      "exact": 75,
+      "zones": 446,
+      "size": 39127,
+      "sha256": "4018d04cf08466449330524ab5b5407cb87617b2f89ee7ed954485d89346a1c5",
+      "url": "deps/2B.tgz"
+    },
+    {
+      "code": "30",
+      "nom": "Gard",
+      "pm": 1453,
+      "exact": 11,
+      "zones": 1453,
+      "size": 122685,
+      "sha256": "3da2202f8aab2a1c1d3b414dd42d95c88539ef0d0600e39b8071e0a6fb4324af",
+      "url": "deps/30.tgz"
+    },
+    {
+      "code": "31",
+      "nom": "Haute-Garonne",
+      "pm": 1509,
+      "exact": 55,
+      "zones": 1509,
+      "size": 130244,
+      "sha256": "aca0f5df83cc06e4f0f70a8b3bcd67e517b6b4e7f754698e628385827ef28a01",
+      "url": "deps/31.tgz"
+    },
+    {
+      "code": "32",
+      "nom": "Gers",
+      "pm": 437,
+      "exact": 1,
+      "zones": 437,
+      "size": 41159,
+      "sha256": "e6279fdf070c0886993ec7ac8b2c44335b794e066ff1c053e5edae4abb2a6169",
+      "url": "deps/32.tgz"
+    },
+    {
+      "code": "33",
+      "nom": "Gironde",
+      "pm": 2717,
+      "exact": 441,
+      "zones": 2717,
+      "size": 243069,
+      "sha256": "d58ab001247ca7c18611d9d45853195eb924582889d4592e999b4557dc02940f",
+      "url": "deps/33.tgz"
+    },
+    {
+      "code": "34",
+      "nom": "Herault",
+      "pm": 1611,
+      "exact": 18,
+      "zones": 1611,
+      "size": 144200,
+      "sha256": "cc6f2d7caf8cf71060a5b4c24bd2f9d1368d15b009838cadd769f19cddde19f8",
+      "url": "deps/34.tgz"
+    },
+    {
+      "code": "35",
+      "nom": "Ille-et-Vilaine",
+      "pm": 1648,
+      "exact": 344,
+      "zones": 1648,
+      "size": 139051,
+      "sha256": "a79add59b72a2f0942461d2157d946d0d7e323de929b991ee5806e17dddfcc16",
+      "url": "deps/35.tgz"
+    },
+    {
+      "code": "36",
+      "nom": "Indre",
+      "pm": 393,
+      "exact": 189,
+      "zones": 393,
+      "size": 36991,
+      "sha256": "0bd79cc6136a8360e4e7348aceac4dfee16820d59dc7d81e726f7e3cd907dfb5",
+      "url": "deps/36.tgz"
+    },
+    {
+      "code": "37",
+      "nom": "Indre-et-Loire",
+      "pm": 1053,
+      "exact": 383,
+      "zones": 1053,
+      "size": 84705,
+      "sha256": "d18c539944782da2f2defa0ed2a7f891226e622a4e29997d7eb1c2013d66a4d4",
+      "url": "deps/37.tgz"
+    },
+    {
+      "code": "38",
+      "nom": "Isere",
+      "pm": 1427,
+      "exact": 55,
+      "zones": 1427,
+      "size": 120239,
+      "sha256": "34668702aebbdd9e71e4ae33db83586d017b9ac31e9397cb8517c5e5daccf420",
+      "url": "deps/38.tgz"
+    },
+    {
+      "code": "39",
+      "nom": "Jura",
+      "pm": 449,
+      "exact": 82,
+      "zones": 449,
+      "size": 41529,
+      "sha256": "9c0ef6793bd677d67a5a04396ca7079fd2312c521f08555b4df8cdc1182d3c85",
+      "url": "deps/39.tgz"
+    },
+    {
+      "code": "40",
+      "nom": "Landes",
+      "pm": 729,
+      "exact": 324,
+      "zones": 729,
+      "size": 66389,
+      "sha256": "c280cca4f68121554e9c406748f3f151aa846633f9ac356f8d3df72862de07a3",
+      "url": "deps/40.tgz"
+    },
+    {
+      "code": "41",
+      "nom": "Loir-et-Cher",
+      "pm": 597,
+      "exact": 296,
+      "zones": 597,
+      "size": 51830,
+      "sha256": "57c677fb1b96bc308daca7abe9da642b97248df653802c684a589e7cd40d6903",
+      "url": "deps/41.tgz"
+    },
+    {
+      "code": "42",
+      "nom": "Loire",
+      "pm": 971,
+      "exact": 2,
+      "zones": 971,
+      "size": 84700,
+      "sha256": "7cb3c17788bab5fceb7f121dec4f3f9ec7c4878791ac01e7ad3227a131814abe",
+      "url": "deps/42.tgz"
+    },
+    {
+      "code": "43",
+      "nom": "Haute-Loire",
+      "pm": 444,
+      "exact": 56,
+      "zones": 444,
+      "size": 42536,
+      "sha256": "5a8dce791c0b6586e4c15dda78368658524533975c3b26df26c57c725cb31b0f",
+      "url": "deps/43.tgz"
+    },
+    {
+      "code": "44",
+      "nom": "Loire-Atlantique",
+      "pm": 1952,
+      "exact": 722,
+      "zones": 1952,
+      "size": 168021,
+      "sha256": "4ce8d4ddc8dc24fa4f5a63604f95a78ebcec44668ff76076699a2c14a3394b42",
+      "url": "deps/44.tgz"
+    },
+    {
+      "code": "45",
+      "nom": "Loiret",
+      "pm": 897,
+      "exact": 435,
+      "zones": 897,
+      "size": 76052,
+      "sha256": "92ca40f34f6b569d3cc2ea0c885f1c127e77a137fc42b389dfdde8fe310c6218",
+      "url": "deps/45.tgz"
+    },
+    {
+      "code": "46",
+      "nom": "Lot",
+      "pm": 498,
+      "exact": 59,
+      "zones": 498,
+      "size": 45197,
+      "sha256": "dd2e08542efe61db84ea3d1937016034d5a7484117cdfd4488fcfe1d3be333b3",
+      "url": "deps/46.tgz"
+    },
+    {
+      "code": "47",
+      "nom": "Lot-et-Garonne",
+      "pm": 695,
+      "exact": 6,
+      "zones": 695,
+      "size": 63980,
+      "sha256": "8c62d8df6c2d6fa8812b67f7bed76e23fdff16f9ed7815e7c402a53a01aac111",
+      "url": "deps/47.tgz"
+    },
+    {
+      "code": "48",
+      "nom": "Lozere",
+      "pm": 272,
+      "exact": 0,
+      "zones": 272,
+      "size": 25814,
+      "sha256": "f6196eb6ab676b91490767199714a2e1691be0150a3abdde721e412be5216f82",
+      "url": "deps/48.tgz"
+    },
+    {
+      "code": "49",
+      "nom": "Maine-et-Loire",
+      "pm": 1468,
+      "exact": 22,
+      "zones": 1468,
+      "size": 120509,
+      "sha256": "858a60eecb574c19ee7c21e5333108d4b3839d2f11425ddb610cf20382371aa9",
+      "url": "deps/49.tgz"
+    },
+    {
       "code": "50",
       "nom": "Manche",
       "pm": 616,
@@ -33,6 +513,106 @@
       "size": 54683,
       "sha256": "3172980b1c59d58e8b054145839eb2bcc4439a254d63149339ebaacc5ce55458",
       "url": "deps/50.tgz"
+    },
+    {
+      "code": "51",
+      "nom": "Marne",
+      "pm": 885,
+      "exact": 12,
+      "zones": 885,
+      "size": 76090,
+      "sha256": "ebda85ada588e0114660d0e91f907710be414caf306d12be40a99159d9271d2e",
+      "url": "deps/51.tgz"
+    },
+    {
+      "code": "52",
+      "nom": "Haute-Marne",
+      "pm": 284,
+      "exact": 3,
+      "zones": 284,
+      "size": 26390,
+      "sha256": "72b7b7c655b35ec3997ffad1c247409e884d270acf50411aa18cc1119891a7ed",
+      "url": "deps/52.tgz"
+    },
+    {
+      "code": "53",
+      "nom": "Mayenne",
+      "pm": 509,
+      "exact": 6,
+      "zones": 509,
+      "size": 46381,
+      "sha256": "7a7b51fb03560bcc4d8a4355acc6eaa0010c377c2b97e6b4adef4465e490cc1e",
+      "url": "deps/53.tgz"
+    },
+    {
+      "code": "54",
+      "nom": "Meurthe-et-Moselle",
+      "pm": 860,
+      "exact": 7,
+      "zones": 860,
+      "size": 73739,
+      "sha256": "cbcdb9009f8af8fb0258b3fc70bb3fe2d325c439b685c14413302613e65c8599",
+      "url": "deps/54.tgz"
+    },
+    {
+      "code": "55",
+      "nom": "Meuse",
+      "pm": 257,
+      "exact": 5,
+      "zones": 257,
+      "size": 23581,
+      "sha256": "5e3a3ceeb07cf1f915e4d13b446011a5daa3d9100d43e4424be40ad651226615",
+      "url": "deps/55.tgz"
+    },
+    {
+      "code": "56",
+      "nom": "Morbihan",
+      "pm": 1482,
+      "exact": 402,
+      "zones": 1482,
+      "size": 125428,
+      "sha256": "a97a3a90b453bbef2fcd2bb0b84f564737ace3223497cb10ea788389fd360c53",
+      "url": "deps/56.tgz"
+    },
+    {
+      "code": "57",
+      "nom": "Moselle",
+      "pm": 1274,
+      "exact": 4,
+      "zones": 1274,
+      "size": 113307,
+      "sha256": "ac49a23c2e9607f55ca3337948eb7e4aa4eabb86a8778e0b8814f20f25f65a19",
+      "url": "deps/57.tgz"
+    },
+    {
+      "code": "58",
+      "nom": "Nievre",
+      "pm": 401,
+      "exact": 73,
+      "zones": 401,
+      "size": 37228,
+      "sha256": "a30711a455e07f8de321e7cee49db89a2c236ec2088bfc3925fd3472c270cf75",
+      "url": "deps/58.tgz"
+    },
+    {
+      "code": "59",
+      "nom": "Nord",
+      "pm": 3544,
+      "exact": 52,
+      "zones": 3544,
+      "size": 322052,
+      "sha256": "e48a1fadb65af5f8d5444e34b9e1542c36b8b6a7dc284a326b2467edb3ef7939",
+      "url": "deps/59.tgz"
+    },
+    {
+      "code": "60",
+      "nom": "Oise",
+      "pm": 984,
+      "exact": 1,
+      "zones": 984,
+      "size": 83925,
+      "sha256": "0d9600d5262825d1ef80aeb271aa5cfa9b5fdeb15bd513dd0ecd83b697363c15",
+      "url": "deps/60.tgz"
     },
     {
       "code": "61",
@@ -45,6 +625,106 @@
       "url": "deps/61.tgz"
     },
     {
+      "code": "62",
+      "nom": "Pas-de-Calais",
+      "pm": 2224,
+      "exact": 17,
+      "zones": 2224,
+      "size": 193325,
+      "sha256": "74f06e8ed8b945ca7deecc4512d1ad624cf2ddea251f1cbe6c96be17cb58c8c0",
+      "url": "deps/62.tgz"
+    },
+    {
+      "code": "63",
+      "nom": "Puy-de-Dome",
+      "pm": 1211,
+      "exact": 98,
+      "zones": 1211,
+      "size": 105265,
+      "sha256": "d118052fc462ce89baf5331aee9fb3bc17d5062e82d355dc9a10357ca4464dd7",
+      "url": "deps/63.tgz"
+    },
+    {
+      "code": "64",
+      "nom": "Pyrenees-Atlantiques",
+      "pm": 1304,
+      "exact": 6,
+      "zones": 1304,
+      "size": 132377,
+      "sha256": "76c534d0b93b42789467a1c52e49d9431d4242ce7d72e8f599be080cabe24d49",
+      "url": "deps/64.tgz"
+    },
+    {
+      "code": "65",
+      "nom": "Hautes-Pyrenees",
+      "pm": 552,
+      "exact": 19,
+      "zones": 552,
+      "size": 54995,
+      "sha256": "150adecddf21fc192ec8c6d4461bd89608fa08b99a9dcdd382edcbb5fbfcf09b",
+      "url": "deps/65.tgz"
+    },
+    {
+      "code": "66",
+      "nom": "Pyrenees-Orientales",
+      "pm": 1000,
+      "exact": 32,
+      "zones": 1000,
+      "size": 81822,
+      "sha256": "3b0fa83d8bb29a45e1b8f9ff7b7ef8c611743c74898c00f24acaab226a8ee871",
+      "url": "deps/66.tgz"
+    },
+    {
+      "code": "67",
+      "nom": "Bas-Rhin",
+      "pm": 1252,
+      "exact": 10,
+      "zones": 1252,
+      "size": 106063,
+      "sha256": "a8d07bda3be0d0dc9b24fba624c3f8497fb753e7fab35ffeeeabe389ca3d570a",
+      "url": "deps/67.tgz"
+    },
+    {
+      "code": "68",
+      "nom": "Haut-Rhin",
+      "pm": 946,
+      "exact": 6,
+      "zones": 946,
+      "size": 80962,
+      "sha256": "ca87a19609daeabea50633c465e1e071732e032be67bba4d04d870f2ed538d8d",
+      "url": "deps/68.tgz"
+    },
+    {
+      "code": "69",
+      "nom": "Rhone",
+      "pm": 2018,
+      "exact": 32,
+      "zones": 2018,
+      "size": 170575,
+      "sha256": "41ff1468993938d7c766c5c6fcd08a94e22e48004175b03c432c70ce868acb60",
+      "url": "deps/69.tgz"
+    },
+    {
+      "code": "70",
+      "nom": "Haute-Saone",
+      "pm": 381,
+      "exact": 58,
+      "zones": 381,
+      "size": 34791,
+      "sha256": "ff1888e31dc11046c68df96ce5d7a9f2d364fb459348339eaa7cee3c3d16fe13",
+      "url": "deps/70.tgz"
+    },
+    {
+      "code": "71",
+      "nom": "Saone-et-Loire",
+      "pm": 962,
+      "exact": 36,
+      "zones": 962,
+      "size": 84995,
+      "sha256": "c28e9d6d2bb23f288df8dbce2e8ac4588ffc158586e809930cbb7cbf3a4da86c",
+      "url": "deps/71.tgz"
+    },
+    {
       "code": "72",
       "nom": "Sarthe",
       "pm": 829,
@@ -53,6 +733,36 @@
       "size": 73481,
       "sha256": "2ed6fa9059d5a6a72e0aaa0583a78d821426564af4f674db5be7ff1dbdeed67c",
       "url": "deps/72.tgz"
+    },
+    {
+      "code": "73",
+      "nom": "Savoie",
+      "pm": 987,
+      "exact": 123,
+      "zones": 987,
+      "size": 83573,
+      "sha256": "da706b16db0ef2a5e0fb952c3685c23007e25c34f7b88650fcc851034c23d9ac",
+      "url": "deps/73.tgz"
+    },
+    {
+      "code": "74",
+      "nom": "Haute-Savoie",
+      "pm": 1576,
+      "exact": 301,
+      "zones": 1576,
+      "size": 137099,
+      "sha256": "49416a3d5fcbf3a1cb7ad4dceb56e4637b27e8ca469ad30c1028f06228c161e2",
+      "url": "deps/74.tgz"
+    },
+    {
+      "code": "75",
+      "nom": "Paris",
+      "pm": 985,
+      "exact": 0,
+      "zones": 985,
+      "size": 52734,
+      "sha256": "9431317d3deee8516019b1ac9eb861f115a6bd407ccf4cc0103a133f1c744d06",
+      "url": "deps/75.tgz"
     },
     {
       "code": "76",
@@ -65,6 +775,16 @@
       "url": "deps/76.tgz"
     },
     {
+      "code": "77",
+      "nom": "Seine-et-Marne",
+      "pm": 1704,
+      "exact": 35,
+      "zones": 1704,
+      "size": 152848,
+      "sha256": "f2b56bf74765d9e9e24c660347de9093d78556304b41649d6a34a25e5291416b",
+      "url": "deps/77.tgz"
+    },
+    {
       "code": "78",
       "nom": "Yvelines",
       "pm": 2169,
@@ -73,6 +793,246 @@
       "size": 181947,
       "sha256": "f895b9df866ef999c66ad7ad48e83c9cc250adbda9d81b0e918390536f4efca4",
       "url": "deps/78.tgz"
+    },
+    {
+      "code": "79",
+      "nom": "Deux-Sevres",
+      "pm": 787,
+      "exact": 181,
+      "zones": 787,
+      "size": 68926,
+      "sha256": "24cd054ed4de319f5bc41738315a3f524762a2aa36f623072aa507bf8911ff6c",
+      "url": "deps/79.tgz"
+    },
+    {
+      "code": "80",
+      "nom": "Somme",
+      "pm": 769,
+      "exact": 45,
+      "zones": 769,
+      "size": 70214,
+      "sha256": "7ee86c64967cbd3c1602e35dafbdecd3bc5dd2934d72dca71628c074da741023",
+      "url": "deps/80.tgz"
+    },
+    {
+      "code": "81",
+      "nom": "Tarn",
+      "pm": 658,
+      "exact": 80,
+      "zones": 658,
+      "size": 56540,
+      "sha256": "f36a716833ff2a71c7cc208fe71ce5d4471fef000b5da4101d488e47ee3b03fd",
+      "url": "deps/81.tgz"
+    },
+    {
+      "code": "82",
+      "nom": "Tarn-et-Garonne",
+      "pm": 382,
+      "exact": 111,
+      "zones": 382,
+      "size": 33517,
+      "sha256": "d563b89e525a411d168842be4573abbd9fdbaf1c6def54a22c5f7a091f4dbcff",
+      "url": "deps/82.tgz"
+    },
+    {
+      "code": "83",
+      "nom": "Var",
+      "pm": 2141,
+      "exact": 18,
+      "zones": 2141,
+      "size": 177210,
+      "sha256": "e5184f5f7eee87e6ced7453c16d4961e068298d9fc4a2f3b5eb4bda46b706dd5",
+      "url": "deps/83.tgz"
+    },
+    {
+      "code": "84",
+      "nom": "Vaucluse",
+      "pm": 966,
+      "exact": 10,
+      "zones": 966,
+      "size": 84270,
+      "sha256": "455a4d73bd849a681ce05b95fbd5207b41853232914876a177683bafd1448169",
+      "url": "deps/84.tgz"
+    },
+    {
+      "code": "85",
+      "nom": "Vendee",
+      "pm": 1286,
+      "exact": 111,
+      "zones": 1286,
+      "size": 110955,
+      "sha256": "e9c13dbbada48757da27b90bf316f7959793eb72c899855bdf4b96a9b400e5f0",
+      "url": "deps/85.tgz"
+    },
+    {
+      "code": "86",
+      "nom": "Vienne",
+      "pm": 846,
+      "exact": 27,
+      "zones": 846,
+      "size": 73516,
+      "sha256": "6fd3f3cd015567484ecdc76041660497041ba61b7b3710b0043af8b4d998d9f0",
+      "url": "deps/86.tgz"
+    },
+    {
+      "code": "87",
+      "nom": "Haute-Vienne",
+      "pm": 760,
+      "exact": 149,
+      "zones": 760,
+      "size": 73066,
+      "sha256": "04f875275a55cd81eafc1dda91af170f672854d4697d1c8a3d3f3a92e84a9a91",
+      "url": "deps/87.tgz"
+    },
+    {
+      "code": "88",
+      "nom": "Vosges",
+      "pm": 487,
+      "exact": 36,
+      "zones": 487,
+      "size": 42269,
+      "sha256": "2e18e003bc419ca0cda7a5e11075b747e233708645cae627f7f471b2a35e77fa",
+      "url": "deps/88.tgz"
+    },
+    {
+      "code": "89",
+      "nom": "Yonne",
+      "pm": 569,
+      "exact": 93,
+      "zones": 569,
+      "size": 52078,
+      "sha256": "739b9aff6eebf68a967ad0cd9f7a8dbfa81eb3b877b885b9d88a2dc021031288",
+      "url": "deps/89.tgz"
+    },
+    {
+      "code": "90",
+      "nom": "Territoire de Belfort",
+      "pm": 260,
+      "exact": 218,
+      "zones": 260,
+      "size": 24796,
+      "sha256": "ab7bad83a9c85eecd7a270dcbdad0ebc1b8b4321a9bd6a1cdf6e21865e42dee1",
+      "url": "deps/90.tgz"
+    },
+    {
+      "code": "91",
+      "nom": "Essonne",
+      "pm": 1554,
+      "exact": 278,
+      "zones": 1554,
+      "size": 130864,
+      "sha256": "cc4dcb192947e223f0c4c54a4c78f6f35a5116548bf019ff6b6d7853d67e1eee",
+      "url": "deps/91.tgz"
+    },
+    {
+      "code": "92",
+      "nom": "Hauts-de-Seine",
+      "pm": 631,
+      "exact": 8,
+      "zones": 631,
+      "size": 45929,
+      "sha256": "f6dcf260837961be9327ad64543d9621a895f06c1439a031b1d27db8be58b24d",
+      "url": "deps/92.tgz"
+    },
+    {
+      "code": "93",
+      "nom": "Seine-Saint-Denis",
+      "pm": 1752,
+      "exact": 39,
+      "zones": 1752,
+      "size": 145997,
+      "sha256": "3b5f0e26d72c7944efdb354ca6ddd2cf09d40d039f97cccd35bf7b3becc762af",
+      "url": "deps/93.tgz"
+    },
+    {
+      "code": "94",
+      "nom": "Val-de-Marne",
+      "pm": 1529,
+      "exact": 113,
+      "zones": 1529,
+      "size": 129585,
+      "sha256": "7472a290f0a2acffe04b12a8dbcf977d0c2480981caa8e0267f5f2443db92556",
+      "url": "deps/94.tgz"
+    },
+    {
+      "code": "95",
+      "nom": "Val-d'Oise",
+      "pm": 1454,
+      "exact": 217,
+      "zones": 1454,
+      "size": 119239,
+      "sha256": "883fd371aecc1d2c289efa456c5c6d49d4b0a540fde59825f721ec96a3d8e1a1",
+      "url": "deps/95.tgz"
+    },
+    {
+      "code": "971",
+      "nom": "Guadeloupe",
+      "pm": 805,
+      "exact": 33,
+      "zones": 805,
+      "size": 64515,
+      "sha256": "ba165e5a174ce3777630109007e618903a9f1b4fbb09b31e8dac5dccd9789920",
+      "url": "deps/971.tgz"
+    },
+    {
+      "code": "972",
+      "nom": "Martinique",
+      "pm": 656,
+      "exact": 14,
+      "zones": 656,
+      "size": 51928,
+      "sha256": "9fcc284d5cb278cc9d3cef54800d2f9d44d927723ca380ef86eeeb04d629df73",
+      "url": "deps/972.tgz"
+    },
+    {
+      "code": "973",
+      "nom": "Guyane",
+      "pm": 326,
+      "exact": 15,
+      "zones": 326,
+      "size": 28188,
+      "sha256": "8e78dc086e1a11f60842f63b594c98098ffb672a0b0f19d27f7b8a03d8f69832",
+      "url": "deps/973.tgz"
+    },
+    {
+      "code": "974",
+      "nom": "La Reunion",
+      "pm": 1593,
+      "exact": 4,
+      "zones": 1593,
+      "size": 133917,
+      "sha256": "e9e4305c1bd1e2666b5333c06752369c93c77d7c87d8269e93325cf12f2b5545",
+      "url": "deps/974.tgz"
+    },
+    {
+      "code": "976",
+      "nom": "Mayotte",
+      "pm": 144,
+      "exact": 0,
+      "zones": 144,
+      "size": 10959,
+      "sha256": "afc9571ecbb3fc386655740f2df2a4e9d1b4ce9f461405fa913de64091002d9b",
+      "url": "deps/976.tgz"
+    },
+    {
+      "code": "977",
+      "nom": "Saint-Barthelemy",
+      "pm": 14,
+      "exact": 0,
+      "zones": 14,
+      "size": 1400,
+      "sha256": "3b2e8f758d5721a6676d597487dde7724a4b77c4a4a1de8dafb826e08893ba70",
+      "url": "deps/977.tgz"
+    },
+    {
+      "code": "978",
+      "nom": "Saint-Martin",
+      "pm": 62,
+      "exact": 0,
+      "zones": 62,
+      "size": 5274,
+      "sha256": "8e7903ef8a9a574f4fe5b4f72a207918e5272870a2c9aa5397fe3b6c0850e807",
+      "url": "deps/978.tgz"
     }
   ]
 }

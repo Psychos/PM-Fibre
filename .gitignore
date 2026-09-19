@@ -19,3 +19,6 @@ AGENTS.md
 
 # APK distribuées (bloat binaire ; distribution réelle via mapm.online)
 *.apk
+
+# Sources ARCEP brutes (~280 Mo une fois extraites ; retelechargeables via data.gouv)
+data/raw_*/
