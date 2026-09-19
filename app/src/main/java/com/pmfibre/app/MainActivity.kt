@@ -2,17 +2,21 @@ package com.pmfibre.app
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
+import android.os.SystemClock
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -51,6 +55,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -309,96 +314,133 @@ fun MainScreen(onLogout: () -> Unit) {
         }
     }
 
+    // Les sous-écrans s'affichent PAR-DESSUS l'écran courant, ils ne le remplacent
+    // plus (roadmap 4.9). Le `return` anticipé d'avant sortait l'onglet de la
+    // composition et emportait tout son état `remember` : ouvrir une fiche depuis
+    // « Autour » puis revenir rendait une liste vide et un fix GPS à refaire.
+    // Ici l'écran du dessous reste composé, sa liste et son défilement intacts.
     val current = selected
-    if (current != null) {
-        PmDetailScreen(pm = current, onBack = { selected = null })
-        return
-    }
-    if (showAdd) {
-        AddPmScreen(onBack = { showAdd = false }, onCreated = { pm -> showAdd = false; selected = pm })
-        return
-    }
-    if (showAdmin) {
-        AdminScreen(onBack = { showAdmin = false })
-        return
-    }
-    if (showHelp) {
-        HelpScreen(onBack = { showHelp = false })
-        return
-    }
-    if (showDeps) {
-        DepScreen(onBack = { showDeps = false }, onChanged = { revision++ })
-        return
+    val fermeSousEcran: (() -> Unit)? = when {
+        current != null -> ({ selected = null })
+        showAdd -> ({ showAdd = false })
+        showAdmin -> ({ showAdmin = false })
+        showHelp -> ({ showHelp = false })
+        showDeps -> ({ showDeps = false })
+        else -> null
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("PM Fibre") },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = BlueDark,
-                    titleContentColor = Color.White
-                )
-            )
-        },
-        bottomBar = {
-            NavigationBar {
-                NavigationBarItem(
-                    selected = tab == 0,
-                    onClick = { tab = 0 },
-                    icon = { Text("🔍", fontSize = 20.sp) },
-                    label = { Text("Recherche") }
-                )
-                NavigationBarItem(
-                    selected = tab == 1,
-                    onClick = { tab = 1 },
-                    icon = { Text("📍", fontSize = 20.sp) },
-                    label = { Text("Autour") }
-                )
-                NavigationBarItem(
-                    selected = tab == 2,
-                    onClick = { tab = 2 },
-                    icon = { Text("🗺️", fontSize = 20.sp) },
-                    label = { Text("Carte") }
-                )
-                NavigationBarItem(
-                    selected = tab == 3,
-                    onClick = { tab = 3 },
-                    icon = { Text("ℹ️", fontSize = 20.sp) },
-                    label = { Text("Compte") }
-                )
+    // Retour système : il n'existait aucun `BackHandler` dans le projet, donc le
+    // geste « retour » quittait l'application depuis n'importe où. Un seul point
+    // d'entrée suffit tant qu'un seul sous-écran est affiché à la fois.
+    var dernierRetour by remember { mutableLongStateOf(0L) }
+    BackHandler {
+        when {
+            fermeSousEcran != null -> fermeSousEcran()
+            tab != 0 -> tab = 0
+            else -> {
+                // Onglet racine : deux appuis pour quitter (roadmap 6). Sur le
+                // terrain, un retour malencontreux coûte un fix GPS et la reprise
+                // d'une saisie ; une confirmation de deux secondes est peu cher payé.
+                val maintenant = SystemClock.elapsedRealtime()
+                if (maintenant - dernierRetour < 2_000) {
+                    (context as? Activity)?.finish()
+                } else {
+                    dernierRetour = maintenant
+                    Toast.makeText(context, "Appuyez à nouveau pour quitter",
+                        Toast.LENGTH_SHORT).show()
+                }
             }
         }
-    ) { innerPadding ->
-        Column(modifier = Modifier.padding(innerPadding).fillMaxSize()) {
-            majDisponible?.let { dataset ->
-                BandeauMiseAJour(
-                    dataset = dataset,
-                    onOuvrir = { majDisponible = null; showDeps = true },
-                    onPlusTard = { majDisponible = null },
-                    onIgnorer = { DepStore.ignore(context, dataset); majDisponible = null }
+    }
+
+    Box(Modifier.fillMaxSize()) {
+
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text("PM Fibre") },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = BlueDark,
+                        titleContentColor = Color.White
+                    )
                 )
+            },
+            bottomBar = {
+                NavigationBar {
+                    NavigationBarItem(
+                        selected = tab == 0,
+                        onClick = { tab = 0 },
+                        icon = { Text("🔍", fontSize = 20.sp) },
+                        label = { Text("Recherche") }
+                    )
+                    NavigationBarItem(
+                        selected = tab == 1,
+                        onClick = { tab = 1 },
+                        icon = { Text("📍", fontSize = 20.sp) },
+                        label = { Text("Autour") }
+                    )
+                    NavigationBarItem(
+                        selected = tab == 2,
+                        onClick = { tab = 2 },
+                        icon = { Text("🗺️", fontSize = 20.sp) },
+                        label = { Text("Carte") }
+                    )
+                    NavigationBarItem(
+                        selected = tab == 3,
+                        onClick = { tab = 3 },
+                        icon = { Text("ℹ️", fontSize = 20.sp) },
+                        label = { Text("Compte") }
+                    )
+                }
             }
-            // L'app démarre sans données (roadmap 3.2) : le dire, plutôt que
-            // laisser croire à une recherche qui ne trouve rien.
-            val nbPm = remember(revision) { PmRepository.size }
-            if (nbPm == 0) {
-                Text(
-                    "Aucun département installé — onglet Compte, « Installer un département ».",
-                    modifier = Modifier.fillMaxWidth()
-                        .background(Color(0xFFE3F2FD))
-                        .clickable { showDeps = true }
-                        .padding(12.dp),
-                    fontSize = 14.sp, color = BlueDark
-                )
+        ) { innerPadding ->
+            Column(modifier = Modifier.padding(innerPadding).fillMaxSize()) {
+                majDisponible?.let { dataset ->
+                    BandeauMiseAJour(
+                        dataset = dataset,
+                        onOuvrir = { majDisponible = null; showDeps = true },
+                        onPlusTard = { majDisponible = null },
+                        onIgnorer = { DepStore.ignore(context, dataset); majDisponible = null }
+                    )
+                }
+                // L'app démarre sans données (roadmap 3.2) : le dire, plutôt que
+                // laisser croire à une recherche qui ne trouve rien.
+                val nbPm = remember(revision) { PmRepository.size }
+                if (nbPm == 0) {
+                    Text(
+                        "Aucun département installé — onglet Compte, « Installer un département ».",
+                        modifier = Modifier.fillMaxWidth()
+                            .background(Color(0xFFE3F2FD))
+                            .clickable { showDeps = true }
+                            .padding(12.dp),
+                        fontSize = 14.sp, color = BlueDark
+                    )
+                }
+                when (tab) {
+                    0 -> SearchScreen(onSelect = { selected = it }, onAddPm = { showAdd = true })
+                    1 -> NearbyScreen(onSelect = { selected = it })
+                    2 -> MapScreen(onSelect = { selected = it })
+                    else -> InfoScreen(syncInfo = syncInfo, onLogout = onLogout,
+                        onOpenAdmin = { showAdmin = true }, onOpenHelp = { showHelp = true },
+                        onOpenDeps = { showDeps = true })
+                }
             }
-            when (tab) {
-                0 -> SearchScreen(onSelect = { selected = it }, onAddPm = { showAdd = true })
-                1 -> NearbyScreen(onSelect = { selected = it })
-                2 -> MapScreen(onSelect = { selected = it })
-                else -> InfoScreen(syncInfo = syncInfo, onLogout = onLogout,
-                    onOpenAdmin = { showAdmin = true }, onOpenHelp = { showHelp = true },
-                    onOpenDeps = { showDeps = true })
+        }
+
+        // `Surface` est opaque et, en Material 3, absorbe les appuis : sans elle
+        // un clic traverserait le sous-écran jusqu'à la liste restée dessous.
+        if (fermeSousEcran != null) {
+            Surface(Modifier.fillMaxSize()) {
+                when {
+                    current != null -> PmDetailScreen(pm = current, onBack = { selected = null })
+                    showAdd -> AddPmScreen(
+                        onBack = { showAdd = false },
+                        onCreated = { pm -> showAdd = false; selected = pm }
+                    )
+                    showAdmin -> AdminScreen(onBack = { showAdmin = false })
+                    showHelp -> HelpScreen(onBack = { showHelp = false })
+                    showDeps -> DepScreen(onBack = { showDeps = false }, onChanged = { revision++ })
+                }
             }
         }
     }

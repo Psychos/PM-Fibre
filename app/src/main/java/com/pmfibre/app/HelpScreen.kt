@@ -59,8 +59,9 @@ fun HelpScreen(onBack: () -> Unit) {
         ) {
             Text("PM Fibre", fontWeight = FontWeight.Bold, fontSize = 22.sp, color = HelpBlueDark)
             HelpBody(
-                "Base collaborative des Points de Mutualisation de Normandie : chacun enregistre " +
-                    "les positions exactes sur le terrain, tout le monde en profite."
+                "Base collaborative des Points de Mutualisation : chacun enregistre les positions " +
+                    "exactes sur le terrain, tout le monde en profite. Les 103 départements sont " +
+                    "couverts ; tu télécharges seulement ceux où tu travailles."
             )
 
             HelpTitle("🔣 Légendes")
@@ -77,12 +78,28 @@ fun HelpScreen(onBack: () -> Unit) {
 
             HorizontalDivider(Modifier.padding(vertical = 12.dp))
 
+            HelpTitle("📦 Départements")
+            HelpBody(
+                "L'application démarre VIDE, c'est normal : les données ne sont plus embarquées. " +
+                    "Onglet Compte → « 📦 Départements », coche ceux dont tu as besoin. Chaque " +
+                    "département pèse environ 80 Ko et se télécharge en un instant.\n\n" +
+                    "• Six départements au maximum à la fois. Au-delà, décoche-en un — rien ne " +
+                    "s'efface définitivement, un département déchargé se réinstalle quand tu veux.\n" +
+                    "• Décharger n'efface QUE les fiches publiques. Tes positions enregistrées, " +
+                    "les PM que tu as ajoutés et les commentaires restent : ils reviennent avec " +
+                    "le département.\n" +
+                    "• Une fois installé, tout fonctionne hors réseau.\n\n" +
+                    "Quand l'ARCEP publie une nouvelle version (environ tous les trois mois), un " +
+                    "bandeau te le signale à l'ouverture. Rien ne se télécharge sans ton accord."
+            )
+
             HelpTitle("🔍 Recherche")
             HelpBody(
                 "Tape au moins 2 caractères : les résultats s'affichent instantanément.\n" +
                     "• Par code PM : « PMU-27-227 », « FI-76… »\n" +
                     "• Par commune : « evreux » (accents et majuscules ignorés)\n" +
-                    "• Par code postal : « 27000 »"
+                    "• Par code postal : « 27000 » — en Normandie uniquement pour l'instant, " +
+                    "les données publiques des autres départements ne portent pas de code postal."
             )
 
             HelpTitle("📍 Autour")
@@ -127,23 +144,28 @@ fun HelpScreen(onBack: () -> Unit) {
             HelpBody(
                 "Automatique à chaque ouverture : tes captures partent au serveur, celles des " +
                     "collègues arrivent. Bouton « Synchroniser maintenant » dans l'onglet Compte.\n\n" +
+                    "Elle ne rapatrie que les départements que tu as installés : inutile de " +
+                    "descendre la France entière pour travailler sur deux départements.\n\n" +
                     "Hors réseau : la recherche, les fiches et les positions déjà connues restent " +
                     "disponibles ; tes captures sont gardées et envoyées au retour du réseau."
             )
 
             HelpTitle("👤 Compte")
             HelpBody(
-                "Mes contributions (positions · confirmations · commentaires), 🏆 Hall of Fame, " +
-                    "⚙️ Mon profil (changer le mot de passe, ajouter un e-mail), et la copie de " +
-                    "secours par fichier (rarement utile : le serveur partage déjà tout)."
+                "📦 Départements (choisir les données à garder sur l'appareil), mes contributions " +
+                    "(positions · confirmations · commentaires), 🏆 Hall of Fame, ⚙️ Mon profil " +
+                    "(changer le mot de passe, ajouter un e-mail), et la copie de secours par " +
+                    "fichier (rarement utile : le serveur partage déjà tout)."
             )
 
             HelpTitle("🆘 Un souci ?")
             HelpBody(
                 "« Serveur injoignable » : vérifie ta connexion données/Wi-Fi. Tout le reste de " +
                     "l'app fonctionne hors-ligne.\n" +
-                    "Mot de passe oublié : demande à un admin de supprimer ton compte, puis " +
-                    "recrée-le avec le code d'invitation."
+                    "« Aucun département installé » : c'est l'état de départ, pas une panne — " +
+                    "voir 📦 Départements plus haut.\n" +
+                    "Mot de passe oublié : demande à un admin de le réinitialiser depuis " +
+                    "l'application ; tu seras déconnecté partout, c'est voulu."
             )
             Spacer(Modifier.height(24.dp))
         }
