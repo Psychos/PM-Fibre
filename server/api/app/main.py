@@ -202,12 +202,27 @@ def my_stats(db: OrmSession = Depends(get_db), user: User = Depends(auth.get_cur
 
 
 @app.put("/auth/profile", response_model=schemas.UserOut)
-def update_profile(req: schemas.ProfileUpdate, db: OrmSession = Depends(get_db),
+def update_profile(req: schemas.ProfileUpdate, request: Request,
+                   db: OrmSession = Depends(get_db),
                    user: User = Depends(auth.get_current_user)):
     if req.new_password:
         if not req.current_password or not auth.verify_password(req.current_password, user.password_hash):
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "Mot de passe actuel incorrect")
         user.password_hash = auth.hash_password(req.new_password)
+        # On change son mot de passe parce qu'on le croit connu d'un tiers.
+        # Laisser vivre les jetons des autres appareils ne reprendrait donc
+        # rien du tout : ils valent 60 jours (§ F14). La session qui fait la
+        # demande est épargnée — se déconnecter soi-même en changeant son mot
+        # de passe serait incompréhensible.
+        courant = auth.token_hash_from_header(request.headers.get("authorization"))
+        autres = db.query(SessionModel).filter(SessionModel.user_id == user.id)
+        if courant:
+            autres = autres.filter(SessionModel.token_hash != courant)
+        fermees = autres.delete(synchronize_session=False)
+        if fermees:
+            logging.getLogger(__name__).info(
+                "changement de mot de passe : %d autre(s) session(s) fermee(s) pour %s",
+                fermees, user.username)
     if req.email is not None:
         user.email = req.email.lower()
     db.commit()
@@ -305,6 +320,7 @@ def get_pm(code: str, db: OrmSession = Depends(get_db), user: User = Depends(aut
         position=_position_out(pos), osm_lat=pm.osm_lat, osm_lon=pm.osm_lon,
         confirmations=conf_count, confirmed_by_me=confirmed_by_me,
         source=pm.source, created_by=pm.created_by, address=pm.address,
+        retired_at=pm.retired_at,
         tags=_tags_of(db, code), access=_access_of(db, code),
         photos=_photos_of(db, code),
     )
@@ -398,6 +414,14 @@ def set_position(code: str, body: schemas.PositionIn,
     if pos is None:
         pos = PmPosition(pm_code=code)
         db.add(pos)
+    else:
+        # La position bouge, et d'au moins 10 m (règle ci-dessus). Les pouces
+        # levés portaient sur l'ancien emplacement : les garder ferait dire à
+        # ceux qui les ont donnés qu'ils ont vu le PM là où il est maintenant,
+        # ce qu'ils n'ont jamais dit. La suppression d'une position les efface
+        # déjà pour cette raison ; un déplacement ne vaut pas mieux (§ F11).
+        db.query(PmConfirmation).filter(
+            PmConfirmation.pm_code == code).delete(synchronize_session=False)
     pos.lat, pos.lon, pos.accuracy_m = body.lat, body.lon, body.accuracy_m
     pos.author = user.username
     # NULL = capture de terrain à fix unique. Surtout : écrase un éventuel « osm »,
@@ -803,20 +827,25 @@ async def upload_photo(
                             "Format non reconnu : JPEG ou PNG attendu")
     ext, _mime = format_
 
+    sha = hashlib.sha256(data).hexdigest()
+    # Même cliché déjà déposé sur ce PM : on rend la ligne existante plutôt
+    # qu'un doublon. Un renvoi après coupure réseau est le cas normal, pas une
+    # erreur à signaler à l'utilisateur.
+    #
+    # Ce contrôle passe AVANT le quota : la sixième photo dont l'accusé de
+    # réception s'est perdu est déjà en base, et la renvoyer n'ajoute rien.
+    # La refuser au nom du quota qu'elle occupe elle-même conduisait le
+    # téléphone à l'effacer (§ F08) — un refus pour un travail déjà fait.
+    existante = db.scalar(select(PmPhoto).where(
+        PmPhoto.pm_code == code, PmPhoto.sha256 == sha, PmPhoto.kind == kind))
+    if existante is not None:
+        return _photo_out(existante)
+
     nb = db.scalar(select(func.count()).select_from(PmPhoto)
                    .where(PmPhoto.pm_code == code)) or 0
     if nb >= photos.MAX_PAR_PM:
         raise HTTPException(status.HTTP_409_CONFLICT,
                             f"Ce PM a déjà {photos.MAX_PAR_PM} photos — supprime-en une d'abord")
-
-    sha = hashlib.sha256(data).hexdigest()
-    # Même cliché déjà déposé sur ce PM : on rend la ligne existante plutôt
-    # qu'un doublon. Un renvoi après coupure réseau est le cas normal, pas une
-    # erreur à signaler à l'utilisateur.
-    existante = db.scalar(select(PmPhoto).where(
-        PmPhoto.pm_code == code, PmPhoto.sha256 == sha, PmPhoto.kind == kind))
-    if existante is not None:
-        return _photo_out(existante)
 
     nom = photos.enregistre(data, ext)
     larg, haut = photos.dimensions(data)

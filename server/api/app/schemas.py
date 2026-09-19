@@ -97,6 +97,11 @@ class PmOut(BaseModel):
     source: str = "arcep"
     created_by: str | None = None
     address: str | None = None
+    # Date de retrait du référentiel ARCEP, si le PM n'est plus au millésime
+    # courant. La base le sait depuis l'import versionné, mais la fiche ne le
+    # disait pas : l'app ne pouvait pas signaler « retiré du référentiel »
+    # alors qu'elle garde la position relevée sur place (§ F12).
+    retired_at: datetime | None = None
     # Étiquettes et accès : servis avec la fiche, pas par deux appels de plus —
     # ils sont affichés dès l'ouverture, en tête (§ 3.7).
     tags: list[str] = []
