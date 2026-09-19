@@ -32,6 +32,16 @@ object ApiClient {
         val code: String, val lat: Double, val lon: Double,
         val author: String?, val updatedAt: String?
     )
+    /** Une synchro menée à son terme : `nextSince` n'est à mémoriser qu'après
+     *  application locale, sinon un échec en cours de route ferait sauter un
+     *  différentiel qui ne reviendra jamais. */
+    data class SyncResult(
+        val positions: List<ServerPmPosition>,
+        val deleted: List<String>,
+        val deps: List<String>,
+        val nextSince: String,
+        val full: Boolean
+    )
     data class Comment(
         val id: Int, val body: String, val author: String?,
         val createdAt: String, val updatedAt: String
@@ -78,22 +88,56 @@ object ApiClient {
     }
 
     // ---- Positions ----
-    /** Récupère toutes les positions exactes du périmètre (pour synchro locale). */
-    suspend fun fetchAllPositions(token: String): List<ServerPmPosition> = withContext(Dispatchers.IO) {
-        // limit=10000 (= plafond serveur) : la purge locale de mergeServerPositions exige
-        // une liste COMPLÈTE — une liste tronquée effacerait des positions valides.
-        val arr = getArray("/pm?has_position=true&limit=10000", token)
-        buildList {
+    /** Nombre de pages maximal d'une synchro : 200 x 2000 positions.
+     *  Garde-fou contre un serveur qui ne rendrait jamais `complete`. */
+    private const val MAX_PAGES_SYNC = 200
+
+    /**
+     * Synchro des positions partagées, page par page, jusqu'à `complete`.
+     *
+     * Remplace l'ancien `/pm?has_position=true&limit=10000` : celui-ci demandait
+     * exactement le plafond du serveur, si bien qu'une liste tronquée revenait
+     * sous la même forme qu'une liste complète. La purge locale prenait alors
+     * les positions manquantes pour des suppressions et effaçait du travail de
+     * terrain. Ici une page inachevée le dit (`complete = false`), et tant que
+     * la boucle n'a pas abouti rien n'est appliqué.
+     *
+     * @param since curseur du dernier appel réussi, ou null pour un inventaire complet
+     * @param deps  départements demandés ; vide = France entière
+     */
+    suspend fun syncPositions(token: String, since: String?, deps: List<String> = emptyList()):
+        SyncResult = withContext(Dispatchers.IO) {
+        val positions = ArrayList<ServerPmPosition>()
+        val deleted = ArrayList<String>()
+        var curseur = since
+        var pages = 0
+        while (true) {
+            val q = StringBuilder("/sync/positions?")
+            if (!curseur.isNullOrEmpty()) q.append("since=").append(enc(curseur!!)).append('&')
+            if (deps.isNotEmpty()) q.append("dep=").append(enc(deps.joinToString(","))).append('&')
+            val o = requestJson("GET", q.toString().trimEnd('&', '?'), null, token)
+
+            val arr = o.getJSONArray("positions")
             for (i in 0 until arr.length()) {
-                val o = arr.getJSONObject(i)
-                if (!o.isNull("lat") && !o.isNull("lon")) {
-                    add(ServerPmPosition(
-                        o.getString("code"), o.getDouble("lat"), o.getDouble("lon"),
-                        optStr(o, "author"), optStr(o, "updated_at")
-                    ))
-                }
+                val x = arr.getJSONObject(i)
+                if (x.isNull("lat") || x.isNull("lon")) continue
+                positions.add(ServerPmPosition(
+                    x.getString("code"), x.getDouble("lat"), x.getDouble("lon"),
+                    optStr(x, "author"), optStr(x, "updated_at")
+                ))
+            }
+            val sup = o.getJSONArray("deleted")
+            for (i in 0 until sup.length()) deleted.add(sup.getString(i))
+
+            curseur = o.getString("next_since")
+            if (o.optBoolean("complete", true)) break
+            if (++pages >= MAX_PAGES_SYNC) {
+                // Ne rien appliquer : une synchro partielle prise pour complète
+                // est précisément le défaut qu'on corrige ici.
+                throw ApiException(0, "Synchro interrompue (trop de pages) — réessaie plus tard.")
             }
         }
+        SyncResult(positions, deleted, deps, curseur!!, full = since.isNullOrEmpty())
     }
 
     /** Publie/actualise la position exacte d'un PM. `manual` = saisie clavier (contrôle de zone strict). */
@@ -206,6 +250,11 @@ object ApiClient {
     suspend fun deleteUser(token: String, id: Int) = withContext(Dispatchers.IO) {
         requestJson("DELETE", "/admin/users/$id", null, token)
         Unit
+    }
+
+    suspend fun resetUserPassword(token: String, id: Int): String = withContext(Dispatchers.IO) {
+        val o = requestJson("POST", "/admin/users/$id/reset-password", JSONObject(), token)
+        o.getString("temporary_password")
     }
 
     suspend fun fetchInvitationCodes(token: String): InvitationCodes = withContext(Dispatchers.IO) {

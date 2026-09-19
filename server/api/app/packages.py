@@ -67,6 +67,14 @@ def codes_departements() -> list[str]:
     return [d["code"] for d in departements() if d.get("code")]
 
 
+def nom_departement(code: str) -> str | None:
+    """« 14 » -> « Calvados ». None si le département n'est pas déployé."""
+    for d in departements():
+        if d.get("code") == code:
+            return d.get("nom")
+    return None
+
+
 def _lit_membre(code: str, membre: str) -> dict | list | None:
     """Extrait un fichier d'un paquet. None si le paquet ou le membre manque."""
     chemin = _chemin_paquet(code)

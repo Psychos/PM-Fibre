@@ -480,14 +480,49 @@ composé, sa liste et son défilement sont intacts. Idem pour `AddPmScreen`,
    un PM ne bouge quasiment jamais. 1 321 positions sur 7 930 (17 %).
 
 2. Import serveur national **versionné** en remplacement de `_import_pm_if_empty`,
-   et mise en place d'un vrai mécanisme de migration *(§ 4.2, § 4.3)*
-3. `geo.py` : zones par département, chargées à la demande *(§ 4.7)*
-4. **Synchro : filtre par département, `since`, tombstones** — supprimer la
-   dépendance au `limit=10000` avant qu'elle n'efface les positions de quelqu'un
-   *(§ 4.1)*
+   et mise en place d'un vrai mécanisme de migration *(§ 4.2, § 4.3)* — *fait*
+
+   `server/api/app/importer.py` lit les paquets par département (via
+   `packages.py`, les mêmes fichiers que le site sert à l'app) et n'agit que si
+   le millésime du manifeste diffère de celui gardé dans `settings`. Un PM
+   disparu du référentiel est **marqué `retired_at`, jamais supprimé** : les
+   clés étrangères sont `ON DELETE CASCADE`, un `DELETE` emporterait sa position
+   exacte. Seules les positions marquées `p: 1` entrent en base — les 88 % de
+   centroïdes approchés du paquet resteraient sinon publiés comme des relevés de
+   terrain. `server/api/app/migrate.py` applique les SQL numérotés de
+   `server/db/migrations/` et les trace dans `schema_migrations`.
+
+3. `geo.py` : zones par département, chargées à la demande *(§ 4.7)* — *fait*
+
+   Cache LRU de 12 départements. Au passage : l'ancien `zones_normandie.json`
+   était bien déployé sur PsyOne mais **n'était pas versionné**, si bien qu'un
+   redéploiement depuis le dépôt seul aurait rendu `check_in_zone` permissif
+   pour tous les PM, sans rien signaler.
+
+4. **Synchro : filtre par département, `since`, tombstones** — *fait*
+
+   `GET /sync/positions?dep=14,27&since=…` rend une page **et dit s'il en
+   reste** (`complete`, `next_since`). C'est le point essentiel : l'ancien
+   `/pm?has_position=true&limit=10000` demandait exactement le plafond du
+   serveur, donc une réponse tronquée était indiscernable d'un inventaire
+   complet, et la purge locale prenait les lignes manquantes pour des
+   suppressions. Un plafond plus haut n'aurait fait que repousser l'échéance.
+   Les suppressions passent désormais par la table `tombstones`, alimentée par
+   `DELETE /pm/{code}/position` et `DELETE /comments/{id}` ; republier une
+   position lève sa pierre tombale. `?dep=` accepte enfin une liste (c'était une
+   égalité, `?dep=14,27,50` n'aurait rien rendu). Côté app,
+   `ApiClient.syncPositions` boucle jusqu'à `complete` et n'applique rien tant
+   que la boucle n'a pas abouti ; `mergeServerPositions` ne purge plus que sur
+   un inventaire complet et national.
+
 5. **Gel de schéma** : `method` sur les positions, table des étiquettes,
    indication d'accès, table des photos, point d'accès — vides, en attendant leur
-   interface *(§ 4.3, § 4.4)*
+   interface *(§ 4.3, § 4.4)* — *fait*
+
+   `server/db/migrations/001_gel_schema.sql`, en une passe : `method`,
+   `retired_at`, `dataset_version`, `pm_tags`, `pm_access`, `pm_photos`,
+   `tombstones` et les index de date qu'exige la synchro par `since`.
+   `pm_access` est délibérément séparée de `pm`, que l'import réécrit.
 6. App : données hors assets, écran des départements, vérification de mise à jour
 
 ### Ensuite, sans urgence

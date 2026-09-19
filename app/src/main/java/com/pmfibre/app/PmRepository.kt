@@ -160,23 +160,36 @@ object PmRepository {
         persistSaved(context)
     }
 
-    /** Fusionne les positions exactes reçues du serveur (partage entre collègues).
-     *  Marque tout `synced`, et PURGE les positions synced disparues du serveur
-     *  (supprimées par un admin) pour qu'elles ne reviennent pas. */
-    fun mergeServerPositions(context: Context, list: List<ApiClient.ServerPmPosition>): Int {
-        val serverCodes = HashSet<String>(list.size)
-        for (p in list) {
+    /** Applique une synchro serveur : positions reçues, puis suppressions.
+     *
+     *  Les suppressions viennent désormais des pierres tombales (`deleted`) et
+     *  non plus d'une absence dans la liste. L'absence ne prouvait rien : une
+     *  réponse tronquée ressemblait trait pour trait à des suppressions en
+     *  masse, et effaçait des positions relevées sur le terrain.
+     *
+     *  La purge par absence n'est conservée que pour un inventaire complet et
+     *  national (`full` et périmètre non restreint), seul cas où « absent » veut
+     *  encore dire « supprimé ». */
+    fun mergeServerPositions(context: Context, r: ApiClient.SyncResult): Int {
+        val serverCodes = HashSet<String>(r.positions.size)
+        for (p in r.positions) {
             serverCodes.add(p.code)
             val existing = saved[p.code]
             val ts = parseIsoMillis(p.updatedAt) ?: existing?.ts ?: System.currentTimeMillis()
             saved[p.code] = SavedPos(p.lat, p.lon, ts, existing?.note,
                 p.author ?: existing?.author, existing?.accuracyM, synced = true)
         }
-        // Supprimées côté serveur : on retire les entrées synced absentes de la liste.
-        val stale = saved.filter { it.value.synced && it.key !in serverCodes }.keys.toList()
-        for (k in stale) saved.remove(k)
+        for (code in r.deleted) {
+            // Une position locale non encore envoyée n'est pas concernée par une
+            // suppression serveur : elle n'y a jamais été.
+            if (saved[code]?.synced == true) saved.remove(code)
+        }
+        if (r.full && r.deps.isEmpty()) {
+            val stale = saved.filter { it.value.synced && it.key !in serverCodes }.keys.toList()
+            for (k in stale) saved.remove(k)
+        }
         persistSaved(context)
-        return list.size
+        return r.positions.size
     }
 
     /** Positions locales PAS ENCORE envoyées au serveur (captures hors-ligne, migration v3) :

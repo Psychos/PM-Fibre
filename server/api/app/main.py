@@ -3,7 +3,7 @@ import logging
 import math
 import os
 import secrets
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # Sans ceci, les logger.info() applicatifs (ex. auth.py) sont silencieusement
 # perdus : uvicorn configure ses propres loggers mais pas le root logger.
@@ -17,7 +17,7 @@ from .db import Base, engine, get_db, wait_for_db
 from . import models
 from .models import (
     User, Pm, PmPosition, PmPositionHistory, PmComment, PmConfirmation,
-    Session as SessionModel, Setting,
+    Session as SessionModel, Setting, Tombstone,
 )
 from . import schemas
 from . import auth
@@ -25,6 +25,7 @@ from . import ratelimit
 from . import geo
 from . import importer
 from . import migrate
+from . import packages
 
 app = FastAPI(title="PM Fibre API", version="1.0.0")
 
@@ -224,6 +225,17 @@ def _position_out(pos: PmPosition | None) -> schemas.PositionOut | None:
                                author=pos.author, updated_at=pos.updated_at)
 
 
+def _departements_demandes(dep: str | None) -> list[str]:
+    """« 14,27,50 » -> ["14", "27", "50"]. Liste vide = aucun filtre.
+
+    Un `Pm.dep_code == dep` ne pouvait convenir qu'à un département à la fois ;
+    l'app a besoin d'en demander plusieurs d'un coup (§ 4.1).
+    """
+    if not dep:
+        return []
+    return [c.strip() for c in dep.split(",") if c.strip()]
+
+
 @app.get("/pm", response_model=list[schemas.PmListItem])
 def list_pm(
     dep: str | None = Query(default=None, description="dep_code ex. 14,27,50,61,76"),
@@ -236,8 +248,9 @@ def list_pm(
     user: User = Depends(auth.get_current_user),
 ):
     stmt = select(Pm, PmPosition).outerjoin(PmPosition, Pm.code == PmPosition.pm_code)
-    if dep:
-        stmt = stmt.where(Pm.dep_code == dep)
+    deps = _departements_demandes(dep)
+    if deps:
+        stmt = stmt.where(Pm.dep_code.in_(deps))
     if com:
         stmt = stmt.where(Pm.com.like(f"%{com}%"))
     if q:
@@ -281,7 +294,17 @@ def get_pm(code: str, db: OrmSession = Depends(get_db), user: User = Depends(aut
     )
 
 
-DEP_NAMES = {"14": "CALVADOS", "27": "EURE", "50": "MANCHE", "61": "ORNE", "76": "SEINE-MARITIME"}
+def _nom_departement(dep_code: str | None) -> str | None:
+    """Nom ARCEP d'un département, en majuscules comme dans la table `pm`.
+
+    Lu dans le manifeste des paquets : une table en dur ne tenait que les cinq
+    départements normands, et un PM ajouté à la main dans le Rhône serait entré
+    en base avec `dep` à NULL.
+    """
+    if not dep_code:
+        return None
+    nom = packages.nom_departement(dep_code)
+    return nom.upper() if nom else None
 
 
 @app.post("/pm", response_model=schemas.PmOut, status_code=201)
@@ -293,7 +316,7 @@ def create_pm(req: schemas.CreatePmRequest, db: OrmSession = Depends(get_db),
         code = "U" + datetime.utcnow().strftime("%y%m%d%H%M%S") + secrets.token_hex(2)
     if db.get(Pm, code) is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, "Une PM avec cette référence existe déjà")
-    pm = Pm(code=code, op=req.op, com=req.com, dep=DEP_NAMES.get(req.dep_code or ""),
+    pm = Pm(code=code, op=req.op, com=req.com, dep=_nom_departement(req.dep_code),
             dep_code=req.dep_code, etat="ajout terrain", source="user", created_by=user.username)
     db.add(pm)
     db.flush()  # garantit l'insertion du PM avant la position (contrainte FK)
@@ -361,8 +384,16 @@ def set_position(code: str, body: schemas.PositionIn,
         db.add(pos)
     pos.lat, pos.lon, pos.accuracy_m = body.lat, body.lon, body.accuracy_m
     pos.author = user.username
+    # NULL = capture de terrain. Surtout : écrase un éventuel « osm », qu'une
+    # position relevée sur place ne doit plus revendiquer (§ 4.4).
+    pos.method = "manuelle" if body.manual else None
     db.add(PmPositionHistory(pm_code=code, lat=body.lat, lon=body.lon,
-                             accuracy_m=body.accuracy_m, author=user.username))
+                             accuracy_m=body.accuracy_m,
+                             method=pos.method, author=user.username))
+    # Une position republiée annule sa pierre tombale : sans cela la synchro
+    # livrerait dans la même page l'ajout et l'ordre de suppression.
+    db.query(Tombstone).filter(Tombstone.kind == "position",
+                               Tombstone.pm_code == code).delete()
     db.commit()
     db.refresh(pos)
     return _position_out(pos)
@@ -378,8 +409,102 @@ def delete_position(code: str, db: OrmSession = Depends(get_db),
     db.delete(pos)
     # Les confirmations portaient sur cette position : on les retire aussi.
     db.query(PmConfirmation).filter(PmConfirmation.pm_code == code).delete()
+    # Trace de la suppression : une synchro par `since` ne voit que ce qui
+    # existe. Sans elle, la position resterait sur les téléphones (§ 4.1).
+    db.add(Tombstone(kind="position", pm_code=code, author=admin.username))
     db.commit()
     return schemas.MessageResponse(message="Position supprimée.")
+
+
+# ---------------------------------------------------------------------------
+# Synchronisation incrémentale (§ 4.1)
+#
+# L'app demandait `/pm?has_position=true&limit=10000`, soit exactement le
+# plafond du serveur, puis effaçait localement toute position absente de la
+# réponse. À l'échelle nationale la liste déborde : la troncature devenait
+# indiscernable d'une suppression, et le travail de terrain disparaissait des
+# téléphones sans un message d'erreur.
+#
+# Le remède n'est pas un plafond plus haut — il serait franchi un jour — mais un
+# contrat où « il en reste » est une réponse possible : `complete` et
+# `next_since`. Une page tronquée ne peut plus se faire passer pour un
+# inventaire complet.
+# ---------------------------------------------------------------------------
+
+LIMITE_SYNC = 2000
+
+
+@app.get("/sync/positions", response_model=schemas.SyncPositionsOut)
+def sync_positions(
+    dep: str | None = Query(default=None, description="dep_codes séparés par des virgules, ex. 14,27,50"),
+    since: datetime | None = Query(default=None, description="curseur rendu par l'appel précédent"),
+    limit: int = Query(default=LIMITE_SYNC, ge=1, le=5000),
+    db: OrmSession = Depends(get_db),
+    user: User = Depends(auth.get_current_user),
+):
+    """Positions modifiées depuis `since`, et suppressions survenues depuis.
+
+    Sans `since` : inventaire complet du périmètre, suppressions omises (le
+    client n'a rien à retirer qu'il ne saurait déduire de l'inventaire).
+    Avec `since` : différentiel, et c'est `deleted` — alimenté par la table des
+    pierres tombales — qui porte les suppressions.
+    """
+    deps = _departements_demandes(dep)
+
+    base_pos = select(PmPosition).join(Pm, Pm.code == PmPosition.pm_code)
+    if deps:
+        base_pos = base_pos.where(Pm.dep_code.in_(deps))
+
+    # Une pierre tombale peut désigner un PM que le serveur ne connaît plus ; on
+    # la garde alors dans le périmètre : effacer un code qu'on n'a pas est sans
+    # effet, l'omettre laisserait une position fantôme sur le téléphone.
+    base_del = (select(Tombstone)
+                .outerjoin(Pm, Pm.code == Tombstone.pm_code)
+                .where(Tombstone.kind == "position"))
+    if deps:
+        base_del = base_del.where(Pm.dep_code.in_(deps) | Pm.code.is_(None))
+
+    q_pos = base_pos if since is None else base_pos.where(PmPosition.updated_at > since)
+    positions = list(db.scalars(q_pos.order_by(PmPosition.updated_at.asc()).limit(limit)))
+
+    tombes = []
+    if since is not None:
+        tombes = list(db.scalars(base_del.where(Tombstone.deleted_at > since)
+                                 .order_by(Tombstone.deleted_at.asc()).limit(limit)))
+
+    bornes = []
+    if len(positions) == limit:
+        bornes.append(positions[-1].updated_at)
+    if len(tombes) == limit:
+        bornes.append(tombes[-1].deleted_at)
+
+    if bornes:
+        curseur = min(bornes)
+        complete = False
+        # Le curseur est une seconde entière, et l'amorçage OSM écrit ~11 000
+        # positions dans la même : couper au milieu d'un groupe perdrait tout le
+        # reste du groupe, que le `> since` du prochain appel exclurait. On sert
+        # donc le groupe entier, quitte à dépasser `limit` d'une page.
+        positions = ([p for p in positions if p.updated_at < curseur]
+                     + list(db.scalars(base_pos.where(PmPosition.updated_at == curseur))))
+        tombes = ([t for t in tombes if t.deleted_at < curseur]
+                  + (list(db.scalars(base_del.where(Tombstone.deleted_at == curseur)))
+                     if since is not None else []))
+    else:
+        # Horloge de la base, celle des `updated_at` — pas celle de l'API, qui
+        # peut dériver. Une seconde de marge : une écriture concurrente portant
+        # la seconde en cours serait sinon écartée par le `>` du prochain appel.
+        curseur = db.scalar(select(func.now())) - timedelta(seconds=1)
+        complete = True
+
+    return schemas.SyncPositionsOut(
+        deps=deps, since=since, next_since=curseur, complete=complete,
+        positions=[schemas.SyncPositionOut(
+            code=p.pm_code, lat=p.lat, lon=p.lon, accuracy_m=p.accuracy_m,
+            method=p.method, author=p.author, updated_at=p.updated_at,
+        ) for p in positions],
+        deleted=[t.pm_code for t in tombes],
+    )
 
 
 @app.get("/pm/{code}/comments", response_model=list[schemas.CommentOut])
@@ -538,6 +663,8 @@ def edit_comment(comment_id: int, body: schemas.CommentIn,
 def delete_comment(comment_id: int, db: OrmSession = Depends(get_db),
                    user: User = Depends(auth.get_current_user)):
     c = _get_comment_editable(db, comment_id, user)
+    db.add(Tombstone(kind="comment", pm_code=c.pm_code, ref=str(c.id),
+                     author=user.username))
     db.delete(c)
     db.commit()
     return schemas.MessageResponse(message="Commentaire supprimé.")

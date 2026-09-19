@@ -143,3 +143,33 @@ class UserOut(BaseModel):
     active: bool
     created_at: datetime
     last_login: datetime | None = None
+
+
+# ---- Synchronisation incrémentale (§ 4.1) ----
+class SyncPositionOut(BaseModel):
+    code: str
+    lat: float
+    lon: float
+    accuracy_m: float | None = None
+    method: str | None = None
+    author: str | None = None
+    updated_at: datetime
+
+
+class SyncPositionsOut(BaseModel):
+    """Une page de synchro, avec de quoi savoir s'il en reste.
+
+    `complete=False` veut dire « rappelle-moi avec next_since », et non « voilà
+    tout ». C'est la différence avec l'ancien `/pm?limit=10000`, qui rendait une
+    liste tronquée indiscernable d'une liste complète — et le client, croyant la
+    seconde, effaçait les positions manquantes.
+
+    Garantie du curseur : tout ce qui porte un horodatage <= `next_since` a été
+    livré. Le client ne mémorise `next_since` qu'une fois la page appliquée.
+    """
+    deps: list[str]          # périmètre effectif ; borne une éventuelle purge
+    since: datetime | None   # curseur reçu, renvoyé tel quel
+    next_since: datetime     # curseur à présenter au prochain appel
+    complete: bool           # False -> rappeler immédiatement
+    positions: list[SyncPositionOut]
+    deleted: list[str]       # PM dont la position a été supprimée depuis `since`
