@@ -74,6 +74,41 @@ object DepStore {
     /** Ce qu'a changé la réinstallation d'un département déjà présent (roadmap 3.4). */
     data class Diff(val ajoutes: Int, val retires: Int)
 
+    /**
+     * Ce qu'on sait d'un paquet réellement présent sur le téléphone.
+     *
+     * L'application lisait le millésime dans le manifeste téléchargé — or ce
+     * fichier est remplacé dès qu'on va voir s'il y a du neuf, bien avant
+     * qu'aucun département n'ait bougé. Elle annonçait donc « à jour » en
+     * comparant le manifeste à lui-même (§ F10). Le millésime est désormais
+     * écrit dans le paquet installé, au moment de l'installation : il ne peut
+     * plus se désaccorder du contenu, il part avec lui au déchargement, et une
+     * installation interrompue n'en laisse aucun.
+     *
+     * `dataset` et `sha256` sont nuls pour un paquet posé par une version
+     * antérieure, qui ne notait rien : on retombe alors sur le nombre de PM.
+     */
+    data class PaquetInstalle(
+        val code: String, val dataset: String?, val sha256: String?,
+        val pm: Int, val installeLe: Long
+    )
+
+    /** Où en est un département vis-à-vis du manifeste. */
+    enum class EtatDep {
+        /** Pas installé sur ce téléphone. */
+        ABSENT,
+
+        /** Installé, et c'est bien le paquet que le manifeste décrit. */
+        A_JOUR,
+
+        /** Installé, et le manifeste en décrit un autre. */
+        A_METTRE_A_JOUR,
+
+        /** Installé par une version qui ne notait pas le millésime, sans écart
+         *  visible. On ne peut ni l'affirmer à jour ni le dire périmé. */
+        INCONNU,
+    }
+
     class DepException(message: String) : Exception(message)
 
     // ---- Emplacements ----
@@ -205,7 +240,14 @@ object DepStore {
                 if (etag != null) setRequestProperty("If-None-Match", etag)
             }
             try {
-                if (conn.responseCode == HttpURLConnection.HTTP_NOT_MODIFIED) return@withContext null
+                // 304 : le serveur dit que le manifeste en cache est le bon. La
+                // vérification a bien eu lieu — le retour anticipé sautait la
+                // date et on revérifiait à chaque lancement (§ F10) — et
+                // l'appelant reçoit le manifeste qu'il demandait.
+                if (conn.responseCode == HttpURLConnection.HTTP_NOT_MODIFIED) {
+                    marqueVerifiee(context)
+                    return@withContext manifesteLocal(context)
+                }
                 if (conn.responseCode != HttpURLConnection.HTTP_OK) {
                     throw DepException("Manifeste indisponible (HTTP ${conn.responseCode}).")
                 }
@@ -216,17 +258,79 @@ object DepStore {
                 conn.getHeaderField("ETag")?.let {
                     prefs(context).edit().putString(K_ETAG, it).apply()
                 }
+                marqueVerifiee(context)
                 m
             } finally {
                 conn.disconnect()
             }
         }
 
-    /** Vrai s'il y a lieu d'afficher le bandeau : millésime différent de celui des
-     *  paquets installés, non ignoré, et au moins un département à mettre à jour. */
-    fun miseAJourDisponible(context: Context, distant: Manifeste, datasetInstalle: String?): Boolean =
-        datasetInstalle != null && datasetInstalle != distant.dataset &&
-            installes(context).isNotEmpty() && !estIgnore(context, distant.dataset)
+    // ---- Ce qui est installé, département par département ----
+
+    /**
+     * Ce qui est installé pour ce département, ou null s'il ne l'est pas.
+     *
+     * Sans fiche d'installation — paquet posé par une version antérieure — on
+     * compte les PM du fichier : c'est la seule chose comparable au manifeste
+     * qui soit déjà sur le disque. Un écart prouve que le paquet est périmé ;
+     * une égalité ne prouve rien, d'où [EtatDep.INCONNU].
+     */
+    fun paquetInstalle(context: Context, code: String): PaquetInstalle? {
+        val dir = dossier(context, code)
+        val pmJson = File(dir, "pm.json")
+        if (!pmJson.isFile) return null
+        val fiche = File(dir, "paquet.json")
+        if (fiche.isFile) {
+            try {
+                val o = JSONObject(fiche.readText())
+                return PaquetInstalle(
+                    code = code,
+                    dataset = o.optString("dataset", "").ifEmpty { null },
+                    sha256 = o.optString("sha256", "").ifEmpty { null },
+                    pm = o.optInt("pm", 0),
+                    installeLe = o.optLong("installe_le", 0L)
+                )
+            } catch (e: Exception) {
+                // Fiche illisible : on se rabat sur le comptage, comme pour un
+                // paquet ancien. Le contenu, lui, est intact.
+            }
+        }
+        return PaquetInstalle(code, null, null, compteP(pmJson), pmJson.lastModified())
+    }
+
+    fun paquetsInstalles(context: Context): List<PaquetInstalle> =
+        installes(context).mapNotNull { paquetInstalle(context, it) }
+
+    /** Millésime des données réellement présentes, pour l'écran Paramètres. */
+    fun millesimeInstalle(context: Context): String? = millesimeDe(paquetsInstalles(context))
+
+    fun etatsDeps(context: Context, distant: Manifeste): Map<String, EtatDep> {
+        val parCode = distant.deps.associateBy { it.code }
+        return installes(context).associateWith {
+            etatDep(paquetInstalle(context, it), parCode[it])
+        }
+    }
+
+    /** Les départements installés dont le manifeste décrit un autre paquet. */
+    fun aMettreAJour(context: Context, distant: Manifeste): List<String> =
+        etatsDeps(context, distant).filterValues { it == EtatDep.A_METTRE_A_JOUR }.keys.sorted()
+
+    /**
+     * Vrai s'il y a lieu d'afficher le bandeau.
+     *
+     * La condition porte sur les paquets, plus sur le millésime du manifeste :
+     * ce qui compte est qu'un département installé soit périmé, pas qu'un
+     * fichier téléchargé porte une autre date. Un paquet de millésime inconnu
+     * ne l'allume pas — le bandeau annonce des données nouvelles, on ne va pas
+     * l'affirmer sans le savoir ; l'écran Départements, lui, le signale.
+     */
+    fun miseAJourDisponible(context: Context, distant: Manifeste): Boolean =
+        !estIgnore(context, distant.dataset) && aMettreAJour(context, distant).isNotEmpty()
+
+    /** Nombre d'entrées d'un `pm.json`, sans construire les fiches. */
+    private fun compteP(f: File): Int = try {
+        JSONArray(f.readText()).length()
+    } catch (e: Exception) { 0 }
 
     // ---- Installation ----
     /**
@@ -236,7 +340,8 @@ object DepStore {
      * Les positions, PM ajoutés, commentaires et étiquettes ne sont pas touchés :
      * ils vivent ailleurs et sont indexés par code PM (roadmap 3.3).
      */
-    suspend fun installe(context: Context, info: DepInfo): Diff = withContext(Dispatchers.IO) {
+    suspend fun installe(context: Context, manifeste: Manifeste, info: DepInfo): Diff =
+      withContext(Dispatchers.IO) {
         val racine = racine(context)
         racine.mkdirs()
         val cible = File(racine, info.code)
@@ -265,6 +370,11 @@ object DepStore {
             temp.mkdirs()
             File(temp, "pm.json").writeBytes(pm)
             File(temp, "zones.json").writeBytes(zones ?: "{}".toByteArray())
+            // La fiche d'installation entre dans le dossier temporaire, donc
+            // elle arrive avec le paquet ou pas du tout : le millésime noté ne
+            // peut pas décrire un contenu qui n'a pas été posé (§ F10).
+            File(temp, "paquet.json").writeText(
+                ficheInstallation(manifeste.dataset, info, System.currentTimeMillis()))
 
             cible.deleteRecursively()
             if (!temp.renameTo(cible)) throw DepException("Installation de ${info.code} impossible.")
@@ -417,5 +527,54 @@ object DepStore {
             if (c in '0'..'7') v = v * 8 + (c - '0') else if (v > 0) break
         }
         return v
+    }
+}
+
+// ---- Ce qu'un paquet installé sait de lui-même (§ F10) ----
+//
+// Hors de l'objet, et donc sans `Context` : la comparaison au manifeste est la
+// règle qui décide ce qu'on affiche à l'utilisateur, elle s'éprouve sur la JVM.
+
+fun ficheInstallation(dataset: String, info: DepStore.DepInfo, quand: Long): String =
+    JSONObject()
+        .put("dataset", dataset).put("sha256", info.sha256)
+        .put("pm", info.pm).put("installe_le", quand)
+        .toString()
+
+/**
+ * Compare ce qui est posé à ce que le manifeste décrit.
+ *
+ * L'empreinte du paquet tranche : elle porte sur l'archive entière, deux
+ * millésimes qui ne changent rien à un département donnent la même et il n'y a
+ * alors rien à retélécharger. À défaut — paquet d'avant cette version — le
+ * nombre de PM sert de témoin : un écart prouve que le paquet est périmé, une
+ * égalité ne prouve rien.
+ */
+fun etatDep(installe: DepStore.PaquetInstalle?, info: DepStore.DepInfo?): DepStore.EtatDep = when {
+    installe == null -> DepStore.EtatDep.ABSENT
+    // Le département n'est plus au manifeste : rien à quoi le comparer, et
+    // surtout rien à proposer de télécharger.
+    info == null -> DepStore.EtatDep.INCONNU
+    !installe.sha256.isNullOrEmpty() && info.sha256.isNotEmpty() ->
+        if (installe.sha256.equals(info.sha256, ignoreCase = true)) DepStore.EtatDep.A_JOUR
+        else DepStore.EtatDep.A_METTRE_A_JOUR
+    installe.pm > 0 && info.pm > 0 && installe.pm != info.pm -> DepStore.EtatDep.A_METTRE_A_JOUR
+    else -> DepStore.EtatDep.INCONNU
+}
+
+/**
+ * Le millésime des données présentes, tel qu'on l'affiche.
+ *
+ * Plusieurs départements peuvent venir de millésimes différents — on n'installe
+ * pas tout le même jour — et le dire vaut mieux que d'en élire un.
+ */
+fun millesimeDe(paquets: List<DepStore.PaquetInstalle>): String? {
+    if (paquets.isEmpty()) return null
+    val connus = paquets.mapNotNull { it.dataset }.distinct().sorted()
+    val inconnus = paquets.count { it.dataset == null }
+    return when {
+        connus.isEmpty() -> "inconnu"
+        inconnus > 0 -> connus.joinToString(", ") + " (+ $inconnus inconnu(s))"
+        else -> connus.joinToString(", ")
     }
 }

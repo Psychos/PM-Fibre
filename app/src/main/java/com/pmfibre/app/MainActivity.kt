@@ -329,13 +329,16 @@ fun MainScreen(onLogout: () -> Unit) {
         if (!DepStore.verificationDue(context) || !DepStore.reseauAutorise(context)) {
             return@LaunchedEffect
         }
-        val installe = DepStore.manifesteLocal(context)?.dataset
         try {
             val distant = DepStore.recupereManifeste(context) ?: return@LaunchedEffect
-            DepStore.marqueVerifiee(context)
-            if (DepStore.miseAJourDisponible(context, distant, installe)) {
-                majDisponible = distant.dataset
+            // La question posée est « un département installé est-il périmé ? »,
+            // et non « le manifeste a-t-il changé ? » : le manifeste est
+            // remplacé par cette vérification même (§ F10). La réponse demande
+            // de lire les paquets, donc pas sur le fil principal.
+            val aFaire = withContext(Dispatchers.IO) {
+                DepStore.miseAJourDisponible(context, distant)
             }
+            if (aFaire) majDisponible = distant.dataset
         } catch (_: Exception) {
             // Hors ligne, site indisponible : on réessaiera dans 24 h.
         }

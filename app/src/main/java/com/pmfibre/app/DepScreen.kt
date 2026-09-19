@@ -72,17 +72,26 @@ fun DepScreen(onBack: () -> Unit, onChanged: () -> Unit) {
     var chargement by remember { mutableStateOf(manifeste == null) }
     var enCours by remember { mutableStateOf<String?>(null) }   // code en cours d'installation
     var message by remember { mutableStateOf<String?>(null) }
-    var aDecharger by remember { mutableStateOf<DepStore.DepInfo?>(null) }
+    var choisi by remember { mutableStateOf<DepStore.DepInfo?>(null) }
+    // Où en est chaque département installé face au manifeste : c'est ce que
+    // l'écran ne savait pas dire, faute de suivre le millésime des paquets
+    // eux-mêmes (§ F10). Lu au chargement, et après chaque installation.
+    var etats by remember { mutableStateOf<Map<String, DepStore.EtatDep>>(emptyMap()) }
+
+    suspend fun relitEtats() {
+        val m = manifeste ?: return
+        etats = withContext(Dispatchers.IO) { DepStore.etatsDeps(context, m) }
+    }
 
     LaunchedEffect(Unit) {
         chargement = true
         try {
             DepStore.recupereManifeste(context, force = true)?.let { manifeste = it }
-            DepStore.marqueVerifiee(context)
         } catch (e: Exception) {
             // Hors ligne : on continue sur le manifeste en cache, s'il y en a un.
             if (manifeste == null) message = "Liste indisponible (hors ligne ?) — ${errorMessage(e)}"
         }
+        relitEtats()
         chargement = false
     }
 
@@ -96,6 +105,36 @@ fun DepScreen(onBack: () -> Unit, onChanged: () -> Unit) {
         // Le périmètre a changé : le prochain différentiel ne vaudrait rien.
         Sync.reinitialise(context)
         onChanged()
+    }
+
+    fun retireLeDepartement(d: DepStore.DepInfo) {
+        scope.launch {
+            withContext(Dispatchers.IO) {
+                DepStore.decharge(context, d.code)
+                recharge()   // relit les paquets : à ne pas faire sur le fil principal
+            }
+            relitEtats()
+            message = "${d.nom} déchargé."
+        }
+    }
+
+    /** Installe ou remplace un département. Le remplacement ne décharge rien. */
+    fun poseLeDepartement(d: DepStore.DepInfo, remplacement: Boolean) {
+        val m = manifeste ?: return
+        message = null
+        enCours = d.code
+        scope.launch {
+            try {
+                val diff = withContext(Dispatchers.IO) { DepStore.installe(context, m, d) }
+                withContext(Dispatchers.IO) { recharge() }
+                relitEtats()
+                message = "${d.nom} ${if (remplacement) "mis à jour" else "installé"}" +
+                    " (${d.pm} PM)" + resume(diff)
+            } catch (e: Exception) {
+                message = "Échec : ${errorMessage(e)}"
+            }
+            enCours = null
+        }
     }
 
     Scaffold(
@@ -124,8 +163,18 @@ fun DepScreen(onBack: () -> Unit, onChanged: () -> Unit) {
                     Text("Décochez un département pour en ajouter un.",
                         fontSize = 13.sp, color = DepGris)
                 }
+                // Disponible, et non « installé » : c'est le millésime du
+                // manifeste, celui du serveur. Ce qui est réellement posé se lit
+                // ligne par ligne, et dans Paramètres › Données (§ F10).
                 m?.let {
-                    Text("Données ${it.dataset}", fontSize = 12.sp, color = DepGris)
+                    Text("Millésime disponible : ${it.dataset}", fontSize = 12.sp, color = DepGris)
+                }
+                val aFaire = etats.count { (_, e) -> e == DepStore.EtatDep.A_METTRE_A_JOUR }
+                if (aFaire > 0) {
+                    Text(
+                        "🔄 $aFaire département(s) à mettre à jour — touche la ligne concernée.",
+                        fontSize = 13.sp, fontWeight = FontWeight.Bold, color = DepBlueDark
+                    )
                 }
                 if (tropVieux) {
                     Spacer(Modifier.height(6.dp))
@@ -171,33 +220,18 @@ fun DepScreen(onBack: () -> Unit, onChanged: () -> Unit) {
                     }
                     items(deps, key = { it.code }) { d ->
                         val installe = d.code in installes
+                        val etat = etats[d.code] ?: DepStore.EtatDep.ABSENT
                         val occupe = enCours != null
                         Row(
                             Modifier.fillMaxWidth().clickable(enabled = !occupe) {
                                 when {
-                                    installe -> aDecharger = d
+                                    installe -> choisi = d
                                     tropVieux ->
                                         message = "Mets d'abord l'application à jour."
                                     installes.size >= plafond ->
                                         message = "${installes.size}/$plafond — décochez un " +
                                             "département pour en ajouter un."
-                                    else -> {
-                                        message = null
-                                        enCours = d.code
-                                        scope.launch {
-                                            try {
-                                                val diff = withContext(Dispatchers.IO) {
-                                                    DepStore.installe(context, d)
-                                                }
-                                                withContext(Dispatchers.IO) { recharge() }
-                                                message = "${d.nom} installé (${d.pm} PM)" +
-                                                    resume(diff)
-                                            } catch (e: Exception) {
-                                                message = "Échec : ${errorMessage(e)}"
-                                            }
-                                            enCours = null
-                                        }
-                                    }
+                                    else -> poseLeDepartement(d, remplacement = false)
                                 }
                             }.padding(horizontal = 8.dp, vertical = 2.dp),
                             verticalAlignment = Alignment.CenterVertically
@@ -211,6 +245,18 @@ fun DepScreen(onBack: () -> Unit, onChanged: () -> Unit) {
                                         "${d.size / 1024} Ko",
                                     fontSize = 12.sp, color = DepGris
                                 )
+                                when (etat) {
+                                    DepStore.EtatDep.A_METTRE_A_JOUR -> Text(
+                                        "🔄 Nouvelle version disponible",
+                                        fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                                        color = DepBlueDark
+                                    )
+                                    DepStore.EtatDep.INCONNU -> Text(
+                                        "Millésime inconnu — mets-le à jour pour le savoir",
+                                        fontSize = 12.sp, color = DepGris
+                                    )
+                                    else -> {}
+                                }
                             }
                             if (enCours == d.code) {
                                 CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
@@ -234,32 +280,61 @@ fun DepScreen(onBack: () -> Unit, onChanged: () -> Unit) {
         }
     }
 
-    // Confirmation de déchargement : dire ce qui part ET ce qui reste (roadmap 3.3).
-    aDecharger?.let { d ->
+    // Département déjà installé : le mettre à jour, ou le décharger. Le
+    // remplacement se fait sur place — il fallait auparavant décharger puis
+    // réinstaller, c'est-à-dire se priver du département en attendant, et
+    // l'écran ne proposait rien d'autre (§ F10). Décharger dit ce qui part ET
+    // ce qui reste (roadmap 3.3).
+    choisi?.let { d ->
+        val etat = etats[d.code] ?: DepStore.EtatDep.INCONNU
+        val aJour = etat == DepStore.EtatDep.A_JOUR
         AlertDialog(
-            onDismissRequest = { aDecharger = null },
-            title = { Text("Décharger ${d.nom} ?") },
+            onDismissRequest = { choisi = null },
+            title = { Text(if (aJour) "Décharger ${d.nom} ?" else "${d.nom}") },
             text = {
                 Text(
-                    "Les ${d.pm} PM ARCEP de ce département seront supprimés de l'appareil.\n\n" +
-                        "Tes positions enregistrées, les PM que tu as ajoutés et les commentaires " +
-                        "sont conservés : ils reviendront si tu réinstalles le département."
+                    when (etat) {
+                        DepStore.EtatDep.A_METTRE_A_JOUR ->
+                            "Une nouvelle version de ce département est disponible " +
+                                "(${d.pm} PM, ${d.size / 1024} Ko). La mettre à jour remplace " +
+                                "les données ARCEP sur place ; tes positions, tes PM ajoutés " +
+                                "et les commentaires ne sont pas touchés.\n\n" +
+                                "Décharger, au contraire, retire ce département de l'appareil."
+                        DepStore.EtatDep.INCONNU ->
+                            "Ce paquet a été installé par une version de l'application qui " +
+                                "ne notait pas son millésime. Le mettre à jour le remet au " +
+                                "millésime du serveur et lève le doute.\n\n" +
+                                "Tes positions, tes PM ajoutés et les commentaires sont " +
+                                "conservés dans les deux cas."
+                        else ->
+                            "Les ${d.pm} PM ARCEP de ce département seront supprimés de " +
+                                "l'appareil.\n\nTes positions enregistrées, les PM que tu as " +
+                                "ajoutés et les commentaires sont conservés : ils reviendront " +
+                                "si tu réinstalles le département."
+                    }
                 )
             },
             confirmButton = {
-                TextButton(onClick = {
-                    aDecharger = null
-                    scope.launch {
-                        withContext(Dispatchers.IO) {
-                            DepStore.decharge(context, d.code)
-                            recharge()   // relit les paquets : à ne pas faire sur le fil principal
-                        }
-                        message = "${d.nom} déchargé."
+                if (aJour) {
+                    TextButton(onClick = { choisi = null; retireLeDepartement(d) }) {
+                        Text("Décharger")
                     }
-                }) { Text("Décharger") }
+                } else {
+                    TextButton(onClick = {
+                        choisi = null
+                        poseLeDepartement(d, remplacement = true)
+                    }) { Text("Mettre à jour") }
+                }
             },
             dismissButton = {
-                TextButton(onClick = { aDecharger = null }) { Text("Annuler") }
+                Row {
+                    if (!aJour) {
+                        TextButton(onClick = { choisi = null; retireLeDepartement(d) }) {
+                            Text("Décharger")
+                        }
+                    }
+                    TextButton(onClick = { choisi = null }) { Text("Annuler") }
+                }
             }
         )
     }

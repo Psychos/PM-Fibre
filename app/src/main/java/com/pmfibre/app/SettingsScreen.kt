@@ -528,10 +528,16 @@ private fun RubriqueMaj() {
     val scope = rememberCoroutineScope()
     var etat by remember { mutableStateOf<String?>(null) }
     var occupe by remember { mutableStateOf(false) }
-    val installe = remember { DepStore.manifesteLocal(context) }
+    // Le millésime vient des paquets posés, pas du manifeste téléchargé : celui-ci
+    // est remplacé dès qu'on va voir s'il y a du neuf, et l'écran annonçait alors
+    // comme installé un millésime dont rien n'avait été installé (§ F10).
+    var millesime by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        millesime = withContext(Dispatchers.IO) { DepStore.millesimeInstalle(context) }
+    }
 
     TitreSection("Données ARCEP")
-    Text("Millésime installé : " + (installe?.dataset ?: "aucun"),
+    Text("Millésime installé : " + (millesime ?: "aucun"),
         fontSize = 15.sp, modifier = Modifier.padding(horizontal = 16.dp))
     Text("Dernière vérification : " + formatQuand(DepStore.derniereVerification(context)),
         fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -543,11 +549,16 @@ private fun RubriqueMaj() {
             scope.launch {
                 etat = try {
                     val distant = DepStore.recupereManifeste(context, force = true)
-                    DepStore.marqueVerifiee(context)
+                    val aFaire = if (distant == null) emptyList()
+                        else withContext(Dispatchers.IO) { DepStore.aMettreAJour(context, distant) }
+                    millesime = withContext(Dispatchers.IO) { DepStore.millesimeInstalle(context) }
                     when {
                         distant == null -> "Pas de réponse du serveur."
-                        DepStore.miseAJourDisponible(context, distant, installe?.dataset) ->
-                            "Nouvelle version disponible : ${distant.dataset} — va dans 📦 Départements."
+                        // Nommés : « une mise à jour est disponible » sans dire
+                        // laquelle oblige à ouvrir l'écran pour le découvrir.
+                        aFaire.isNotEmpty() ->
+                            "À mettre à jour (${distant.dataset}) : ${aFaire.joinToString(", ")}" +
+                                " — va dans 📦 Départements."
                         else -> "Les données sont à jour (${distant.dataset})."
                     }
                 } catch (e: Exception) { "Échec : ${errorMessage(e)}" }
